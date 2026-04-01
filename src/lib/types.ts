@@ -8,6 +8,13 @@ export type RarityType =
 
 export type Position = "Goalkeeper" | "Defender" | "Midfielder" | "Forward";
 
+export interface UpcomingGame {
+  date: string;
+  homeTeam: { code: string; name: string; pictureUrl: string };
+  awayTeam: { code: string; name: string; pictureUrl: string };
+  competition: { name: string };
+}
+
 export interface SorarePlayer {
   slug: string;
   displayName: string;
@@ -21,10 +28,12 @@ export interface SorarePlayer {
   } | null;
   activeClub: {
     name: string;
+    code?: string;
     pictureUrl: string;
     domesticLeague: {
       name: string;
     } | null;
+    upcomingGames?: UpcomingGame[];
   } | null;
 }
 
@@ -63,6 +72,59 @@ export interface FacetCounts {
   positions: Record<string, number>;
   tiers: Record<number, number>;
   cardSets: Record<string, number>;
+}
+
+export type LineupPosition = "GK" | "DEF" | "MID" | "FWD" | "EX";
+
+export interface LineupSlot {
+  position: LineupPosition;
+  card: SorareCard | null;
+}
+
+export interface LineupState {
+  slots: LineupSlot[];
+  targetScore: number;
+}
+
+export interface FixtureGame {
+  id: string;
+  date: string;
+  statusTyped: string;
+  homeTeam: { code: string; name: string; slug: string; pictureUrl: string };
+  awayTeam: { code: string; name: string; slug: string; pictureUrl: string };
+  competition: { name: string };
+}
+
+export interface Fixture {
+  slug: string;
+  displayName: string;
+  gameWeek: number;
+  startDate: string;
+  endDate: string;
+  games: FixtureGame[];
+}
+
+export interface PlayerGameScore {
+  score: number;
+  scoreStatus: string;
+  projectedScore: number | null;
+  projection: { grade: string } | null;
+  positionTyped: string;
+  anyGame: {
+    date: string;
+    homeTeam: { code: string; name: string };
+    awayTeam: { code: string; name: string };
+    competition: { name: string };
+    status: string;
+  };
+  anyPlayerGameStats: {
+    fieldStatus: string;
+    footballPlayingStatusOdds: {
+      starterOddsBasisPoints: number;
+      reliability: string;
+    } | null;
+    minsPlayed: number;
+  } | null;
 }
 
 export const RARITY_CONFIG: Record<

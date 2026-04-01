@@ -4,6 +4,7 @@ import { memo, useState, useCallback } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { POSITION_SHORT, type SorareCard } from "@/lib/types";
+import { getEditionInfo } from "@/lib/ai-lineup";
 
 interface CardComponentProps {
   card: SorareCard;
@@ -90,6 +91,7 @@ export const CardComponent = memo(function CardComponent({
   const grade = card.grade || 0;
   const edition = (card.cardEditionName || "").toLowerCase();
   const isStellar = edition.includes("stellar");
+  const editionInfo = getEditionInfo(card);
 
   return (
     <div
@@ -128,6 +130,20 @@ export const CardComponent = memo(function CardComponent({
         {!imageLoaded && !imageError && (
           <div className="absolute inset-0 bg-zinc-800 animate-pulse" />
         )}
+        {editionInfo.bonus > 0 && (
+          <div
+            className={cn(
+              "absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold",
+              editionInfo.tier === "legendary"
+                ? "bg-amber-500/90 text-black"
+                : editionInfo.tier === "holo"
+                  ? "bg-cyan-500/90 text-black"
+                  : "bg-blue-500/90 text-white"
+            )}
+          >
+            +{Math.round(editionInfo.bonus * 100)}%
+          </div>
+        )}
       </div>
 
       {/* Info Bar */}
@@ -158,6 +174,20 @@ export const CardComponent = memo(function CardComponent({
         {isStellar && (
           <p className="text-[9px] text-purple-400 uppercase tracking-wider font-medium">
             Stellar Nights
+          </p>
+        )}
+        {editionInfo.bonus > 0 && (
+          <p
+            className={cn(
+              "text-[9px] uppercase tracking-wider font-medium",
+              editionInfo.tier === "legendary"
+                ? "text-amber-400"
+                : editionInfo.tier === "holo"
+                  ? "text-cyan-400"
+                  : "text-blue-400"
+            )}
+          >
+            {editionInfo.label}
           </p>
         )}
 
