@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Info } from "lucide-react";
+import { Info, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLineupStore } from "@/lib/lineup-store";
 import { estimateTotalScore } from "@/lib/ai-lineup";
@@ -48,9 +48,10 @@ function SlotCard({
   slotIndex: number;
   label: string;
 }) {
-  const { slots, selectedSlotIndex, selectSlot, removeCard } = useLineupStore();
+  const { slots, selectedSlotIndex, selectSlot, removeCard, setCaptain } = useLineupStore();
   const slot = slots[slotIndex];
   const card = slot?.card;
+  const isCaptain = slot?.isCaptain;
   const isSelected = selectedSlotIndex === slotIndex;
   const player = card?.anyPlayer;
 
@@ -66,7 +67,9 @@ function SlotCard({
       className={cn(
         "relative w-[150px] h-[200px] rounded-xl transition-all flex flex-col items-center justify-center gap-2",
         card
-          ? "bg-zinc-800/80 border border-zinc-600 hover:border-red-500/50 backdrop-blur-sm"
+          ? isCaptain
+            ? "bg-zinc-800/80 border-2 border-amber-400 shadow-lg shadow-amber-500/20 backdrop-blur-sm"
+            : "bg-zinc-800/80 border border-zinc-600 hover:border-red-500/50 backdrop-blur-sm"
           : isSelected
             ? "bg-purple-500/15 border-2 border-purple-400 animate-pulse backdrop-blur-sm"
             : "bg-white/5 border border-dashed border-zinc-500/50 hover:border-purple-500/50 backdrop-blur-sm"
@@ -75,6 +78,22 @@ function SlotCard({
       {card && player ? (
         <>
           <PitchCardModal card={card} />
+          {/* Captain toggle */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setCaptain(slotIndex);
+            }}
+            className={cn(
+              "absolute top-1.5 left-1.5 z-10 p-1 rounded-full transition-all",
+              isCaptain
+                ? "bg-amber-500/30 text-amber-400"
+                : "text-zinc-600 hover:text-amber-400 hover:bg-amber-500/10"
+            )}
+            title={isCaptain ? "Remove captain" : "Set as captain (+50%)"}
+          >
+            <Crown className="w-4 h-4" />
+          </button>
           <div className="relative w-24 h-[120px] rounded-lg overflow-hidden">
             <Image
               src={card.pictureUrl}
@@ -87,6 +106,27 @@ function SlotCard({
           <span className="text-[11px] text-zinc-200 font-semibold truncate w-full text-center px-2">
             {player.displayName.split(" ").pop()}
           </span>
+          {/* Rival team + kickoff */}
+          {(() => {
+            const game = player.activeClub?.upcomingGames?.[0];
+            if (!game) return null;
+            const clubCode = player.activeClub?.code;
+            const rival = game.homeTeam.code === clubCode ? game.awayTeam.code : game.homeTeam.code;
+            const isHome = game.homeTeam.code === clubCode;
+            const kickoff = new Date(game.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+            return (
+              <span className="text-[9px] text-zinc-400 flex items-center gap-1">
+                <span className={isHome ? "text-zinc-300" : ""}>{isHome ? "vs" : "@"}</span>
+                <span className="font-semibold text-zinc-300">{rival}</span>
+                <span className="text-zinc-500">{kickoff}</span>
+              </span>
+            );
+          })()}
+          {isCaptain && (
+            <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded">
+              C +50%
+            </span>
+          )}
         </>
       ) : (
         <>
@@ -106,7 +146,8 @@ export function Pitch() {
   const { slots, targetScore } = useLineupStore();
 
   const filledCards = slots.map((s) => s.card);
-  const totalEstimate = estimateTotalScore(filledCards);
+  const captainIndex = slots.findIndex((s) => s.isCaptain);
+  const totalEstimate = estimateTotalScore(filledCards, captainIndex >= 0 ? captainIndex : undefined);
   const filledCount = filledCards.filter(Boolean).length;
 
   return (

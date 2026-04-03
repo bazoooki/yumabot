@@ -9,13 +9,14 @@ import {
 } from "@/components/sidebar-filters";
 import { CardGrid, CardGridSkeleton } from "@/components/card-grid";
 import { LineupBuilder } from "@/components/lineup-builder/lineup-builder";
+import { StrategyDashboard } from "@/components/strategy-dashboard";
 import { useFilterStore } from "@/lib/store";
 import type { CardsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const USER_SLUG = "ba-zii";
 
-type Tab = "gallery" | "lineup";
+type Tab = "gallery" | "lineup" | "strategy";
 
 async function fetchCards(): Promise<CardsResponse> {
   const res = await fetch(`/api/cards?slug=${USER_SLUG}`);
@@ -74,6 +75,17 @@ export default function GalleryPage() {
           >
             Lineup Builder
           </button>
+          <button
+            onClick={() => setActiveTab("strategy")}
+            className={cn(
+              "py-3 text-sm font-medium transition-colors",
+              activeTab === "strategy"
+                ? "text-white border-b-2 border-purple-400"
+                : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            Strategy
+          </button>
         </div>
       </div>
 
@@ -109,30 +121,28 @@ export default function GalleryPage() {
             )}
           </main>
         </div>
+      ) : error ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center space-y-3 max-w-md">
+            <p className="text-lg font-medium text-red-400">
+              Error loading cards
+            </p>
+            <p className="text-sm text-zinc-500">
+              {error instanceof Error ? error.message : "Unknown error"}
+            </p>
+          </div>
+        </div>
+      ) : isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center space-y-3">
+            <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-sm text-zinc-500">Loading cards...</p>
+          </div>
+        </div>
+      ) : activeTab === "lineup" ? (
+        <LineupBuilder cards={allCards} />
       ) : (
-        <>
-          {error ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center space-y-3 max-w-md">
-                <p className="text-lg font-medium text-red-400">
-                  Error loading cards
-                </p>
-                <p className="text-sm text-zinc-500">
-                  {error instanceof Error ? error.message : "Unknown error"}
-                </p>
-              </div>
-            </div>
-          ) : isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center space-y-3">
-                <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-sm text-zinc-500">Loading cards...</p>
-              </div>
-            </div>
-          ) : (
-            <LineupBuilder cards={allCards} />
-          )}
-        </>
+        <StrategyDashboard cards={allCards} />
       )}
     </div>
   );

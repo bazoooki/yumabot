@@ -79,6 +79,7 @@ export type LineupPosition = "GK" | "DEF" | "MID" | "FWD" | "EX";
 export interface LineupSlot {
   position: LineupPosition;
   card: SorareCard | null;
+  isCaptain: boolean;
 }
 
 export interface LineupState {
@@ -115,7 +116,7 @@ export interface PlayerGameScore {
     homeTeam: { code: string; name: string };
     awayTeam: { code: string; name: string };
     competition: { name: string };
-    status: string;
+    statusTyped: string;
   };
   anyPlayerGameStats: {
     fieldStatus: string;
@@ -145,3 +146,38 @@ export const POSITION_SHORT: Record<string, string> = {
   Midfielder: "MD",
   Forward: "FW",
 };
+
+// --- Strategy types ---
+
+export type StrategyTag = "SAFE" | "BALANCED" | "CEILING" | "RISKY";
+export type StrategyMode = "floor" | "balanced" | "ceiling";
+
+export interface CardStrategyMetrics {
+  expectedScore: number;
+  floor: number;
+  ceiling: number;
+  stdDev: number;
+  consistencyScore: number;
+  startProbability: number;
+  strategyTag: StrategyTag;
+  strategyReason: string;
+  isDetailedTier: boolean;
+}
+
+export interface ScoredCardWithStrategy {
+  card: SorareCard;
+  expectedPoints: number;
+  editionBonus: number;
+  editionLabel: string;
+  hasGame: boolean;
+  isHome: boolean;
+  isInjured: boolean;
+  strategy: CardStrategyMetrics;
+  strategyScore: number;
+}
+
+export interface LineupProbability {
+  expectedTotal: number;
+  successProbability: number;
+  confidenceLevel: "high" | "medium" | "low";
+}

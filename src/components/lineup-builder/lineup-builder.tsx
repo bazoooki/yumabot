@@ -37,7 +37,7 @@ export function LineupBuilder({ cards }: LineupBuilderProps) {
       </div>
 
       {/* Right: Card Picker — fixed sidebar */}
-      <div className="w-[420px] shrink-0 border-l border-zinc-800 overflow-hidden">
+      <div className="w-[520px] shrink-0 border-l border-zinc-800 overflow-hidden">
         <CardPicker cards={cards} />
       </div>
     </div>

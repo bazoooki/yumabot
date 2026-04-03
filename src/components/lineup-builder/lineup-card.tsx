@@ -3,19 +3,30 @@
 import { memo, useState } from "react";
 import Image from "next/image";
 import { Info } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { POSITION_SHORT, type SorareCard } from "@/lib/types";
+import { cn, getKickoffUrgency, formatKickoffTime, formatKickoffDate } from "@/lib/utils";
+import { POSITION_SHORT, type SorareCard, type CardStrategyMetrics, type StrategyTag } from "@/lib/types";
 import { getEditionInfo } from "@/lib/ai-lineup";
 import { PlayerModal } from "./player-modal";
 
+const STRATEGY_TAG_STYLE: Record<StrategyTag, { color: string; bg: string }> = {
+  SAFE: { color: "text-green-400", bg: "bg-green-500/20" },
+  BALANCED: { color: "text-blue-400", bg: "bg-blue-500/20" },
+  CEILING: { color: "text-amber-400", bg: "bg-amber-500/20" },
+  RISKY: { color: "text-red-400", bg: "bg-red-500/20" },
+};
+
 interface LineupCardProps {
   card: SorareCard;
+  strategy?: CardStrategyMetrics;
+  starterProbability?: number | null;
   disabled?: boolean;
   onClick?: () => void;
 }
 
 export const LineupCard = memo(function LineupCard({
   card,
+  strategy,
+  starterProbability,
   disabled,
   onClick,
 }: LineupCardProps) {
@@ -33,6 +44,11 @@ export const LineupCard = memo(function LineupCard({
   const nextGame = upcomingGames[0];
   const clubCode = player.activeClub?.code;
 
+  // undefined = not fetched yet, null = no data, number = real value
+  const hasGame = upcomingGames.length > 0;
+  const effectiveStarterProb = starterProbability !== undefined ? starterProbability : null;
+  const showStarterBadge = hasGame; // always show if there's a game
+
   return (
     <>
     <button
@@ -45,15 +61,34 @@ export const LineupCard = memo(function LineupCard({
           : "border-zinc-700/60 bg-zinc-900 hover:border-purple-500/50 hover:bg-zinc-800/80 cursor-pointer"
       )}
     >
-      {/* Card Image */}
-      <div className="relative w-16 h-[84px] rounded-lg overflow-hidden bg-zinc-800 shrink-0">
+      {/* Card Image — scaled up and shifted to show player face, crop bottom name */}
+      <div className="relative w-20 h-[105px] rounded-lg overflow-hidden bg-zinc-800 shrink-0">
         <Image
           src={card.pictureUrl}
           alt={player.displayName}
           fill
-          className="object-cover"
-          sizes="64px"
+          className="object-cover object-top scale-125 -translate-y-1"
+          sizes="80px"
         />
+        {/* Starter probability overlay badge — bottom center */}
+        {showStarterBadge && (
+          <div className={cn(
+            "absolute bottom-0 inset-x-0 text-center py-0.5 text-[11px] font-bold",
+            effectiveStarterProb == null
+              ? "bg-zinc-800/80 text-zinc-500"
+              : effectiveStarterProb >= 90
+                ? "bg-green-500 text-white"
+                : effectiveStarterProb >= 70
+                  ? "bg-green-600/90 text-white"
+                  : effectiveStarterProb >= 50
+                    ? "bg-yellow-500/90 text-black"
+                    : effectiveStarterProb > 0
+                      ? "bg-red-500/90 text-white"
+                      : "bg-zinc-600 text-zinc-300"
+          )}>
+            {effectiveStarterProb != null ? `${Math.round(effectiveStarterProb)}%` : "—%"}
+          </div>
+        )}
       </div>
 
       {/* Info */}
@@ -117,6 +152,18 @@ export const LineupCard = memo(function LineupCard({
               {editionInfo.label}
             </span>
           )}
+          {strategy && (
+            <span
+              className={cn(
+                "text-[10px] font-bold px-1.5 py-0.5 rounded ml-auto",
+                STRATEGY_TAG_STYLE[strategy.strategyTag].bg,
+                STRATEGY_TAG_STYLE[strategy.strategyTag].color,
+              )}
+              title={strategy.strategyReason}
+            >
+              {strategy.strategyTag}
+            </span>
+          )}
         </div>
 
         {/* Next Match */}
@@ -135,13 +182,30 @@ export const LineupCard = memo(function LineupCard({
             )}>
               {nextGame.awayTeam.code}
             </span>
-            <span className="text-zinc-300 bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] ml-auto">
-              {new Date(nextGame.date).toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
+            {(() => {
+              const urgency = getKickoffUrgency(nextGame.date);
+              return (
+                <div className="flex items-center gap-1 ml-auto">
+                  {urgency === "imminent" && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  )}
+                  {urgency === "soon" && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                  )}
+                  <div className="flex flex-col items-end bg-zinc-800 px-1.5 py-0.5 rounded">
+                    <span className={cn(
+                      "text-[11px] font-bold leading-tight",
+                      urgency === "imminent" ? "text-green-400" : urgency === "soon" ? "text-yellow-300" : "text-zinc-300"
+                    )}>
+                      {formatKickoffTime(nextGame.date)}
+                    </span>
+                    <span className="text-[9px] text-zinc-500 leading-tight">
+                      {formatKickoffDate(nextGame.date)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="text-[11px] text-red-400/70 mt-2">No upcoming game</div>

@@ -62,40 +62,68 @@ export const USER_CARDS_QUERY = gql`
 `;
 
 export const PLAYER_SCORES_QUERY = gql`
-  query PlayerScores($slug: String!, $position: String!) {
+  query PlayerScores($slug: String!, $position: Position!) {
     anyPlayer(slug: $slug) {
       slug
       displayName
       allPlayerGameScores(first: 15, position: $position) {
-        score
-        scoreStatus
-        projectedScore
-        projection {
-          grade
+        nodes {
+          score
+          scoreStatus
+          projectedScore
+          projection {
+            grade
+          }
+          positionTyped
+          anyGame {
+            date
+            homeTeam {
+              code
+              name
+            }
+            awayTeam {
+              code
+              name
+            }
+            competition {
+              name
+            }
+            statusTyped
+          }
+          anyPlayerGameStats {
+            ... on PlayerGameStats {
+              fieldStatus
+              footballPlayingStatusOdds {
+                starterOddsBasisPoints
+                reliability
+              }
+              minsPlayed
+            }
+          }
         }
-        positionTyped
-        anyGame {
-          date
-          homeTeam {
-            code
-            name
+      }
+    }
+  }
+`;
+
+export const PLAYER_STARTER_ODDS_QUERY = gql`
+  query PlayerStarterOdds($slug: String!) {
+    anyPlayer(slug: $slug) {
+      slug
+      activeClub {
+        upcomingGames(first: 1) {
+          playerGameScore(playerSlug: $slug) {
+            scoreStatus
+            anyPlayerGameStats {
+              ... on PlayerGameStats {
+                fieldStatus
+                footballPlayingStatusOdds {
+                  starterOddsBasisPoints
+                  reliability
+                }
+              }
+            }
           }
-          awayTeam {
-            code
-            name
-          }
-          competition {
-            name
-          }
-          status
-        }
-        anyPlayerGameStats {
-          fieldStatus
-          footballPlayingStatusOdds {
-            starterOddsBasisPoints
-            reliability
-          }
-          minsPlayed
         }
       }
     }

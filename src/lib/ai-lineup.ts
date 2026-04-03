@@ -1,4 +1,13 @@
-import type { SorareCard } from "./types";
+import type {
+  SorareCard,
+  Position,
+  StrategyTag,
+  StrategyMode,
+  CardStrategyMetrics,
+  ScoredCardWithStrategy,
+  LineupProbability,
+  PlayerGameScore,
+} from "./types";
 
 export interface ScoredCard {
   card: SorareCard;
@@ -132,10 +141,407 @@ export function recommendLineup(cards: SorareCard[], count = 5): SorareCard[] {
   return selected.map((sc) => sc.card);
 }
 
-export function estimateTotalScore(cards: (SorareCard | null)[]): number {
-  return cards.reduce((total, card) => {
+export function estimateTotalScore(
+  cards: (SorareCard | null)[],
+  captainIndex?: number | null,
+): number {
+  return cards.reduce((total, card, i) => {
     if (!card) return total;
     const sc = getExpectedPoints(card);
-    return total + sc.expectedPoints;
+    const multiplier = captainIndex != null && i === captainIndex ? 1.5 : 1;
+    return total + sc.expectedPoints * multiplier;
   }, 0);
+}
+
+// --- Level-Aware Strategy System ---
+
+const LEVEL_WEIGHTS: Record<
+  number,
+  { expectedScore: number; floor: number; ceiling: number; consistency: number; startProb: number }
+> = {
+  1: { expectedScore: 0.30, floor: 0.35, ceiling: 0.05, consistency: 0.20, startProb: 0.10 },
+  2: { expectedScore: 0.30, floor: 0.30, ceiling: 0.05, consistency: 0.20, startProb: 0.15 },
+  3: { expectedScore: 0.35, floor: 0.15, ceiling: 0.15, consistency: 0.15, startProb: 0.20 },
+  4: { expectedScore: 0.25, floor: 0.05, ceiling: 0.35, consistency: 0.10, startProb: 0.25 },
+  5: { expectedScore: 0.20, floor: 0.00, ceiling: 0.45, consistency: 0.05, startProb: 0.30 },
+  6: { expectedScore: 0.15, floor: 0.00, ceiling: 0.50, consistency: 0.05, startProb: 0.30 },
+};
+
+const POSITION_DEFAULT_STDDEV: Record<string, number> = {
+  Goalkeeper: 10,
+  Defender: 12,
+  Midfielder: 14,
+  Forward: 18,
+};
+
+export function getStrategyMode(level: number): StrategyMode {
+  if (level <= 2) return "floor";
+  if (level <= 3) return "balanced";
+  return "ceiling";
+}
+
+export function computeStrategyMetrics(
+  card: SorareCard,
+  scoreHistory?: number[] | null,
+  startProbability?: number | null,
+): CardStrategyMetrics {
+  const player = card.anyPlayer;
+  const avgScore = player?.averageScore || 0;
+  const position = player?.cardPositions?.[0] || "Midfielder";
+  const upcomingGames = player?.activeClub?.upcomingGames || [];
+  const hasGame = upcomingGames.length > 0;
+  const power = parseFloat(card.power) || 1;
+  const editionInfo = getEditionInfo(card);
+  const clubCode = player?.activeClub?.code;
+  const isHome = hasGame && upcomingGames[0]?.homeTeam?.code === clubCode;
+
+  let expectedScore = avgScore * power * (1 + editionInfo.bonus);
+  if (!hasGame) expectedScore = 0;
+  if (isHome) expectedScore *= 1.05;
+
+  const isDetailed = !!scoreHistory && scoreHistory.length >= 3;
+  let stdDev: number;
+  let floor: number;
+  let ceiling: number;
+
+  if (isDetailed) {
+    const mean = scoreHistory.reduce((a, b) => a + b, 0) / scoreHistory.length;
+    const variance = scoreHistory.reduce((a, b) => a + (b - mean) ** 2, 0) / scoreHistory.length;
+    stdDev = Math.sqrt(variance);
+    const sorted = [...scoreHistory].sort((a, b) => a - b);
+    const p5Index = Math.max(0, Math.floor(sorted.length * 0.05));
+    const p95Index = Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95));
+    floor = sorted[p5Index] * power * (1 + editionInfo.bonus);
+    ceiling = sorted[p95Index] * power * (1 + editionInfo.bonus);
+  } else {
+    stdDev = POSITION_DEFAULT_STDDEV[position] || 14;
+    floor = Math.max(0, (avgScore - 1.65 * stdDev)) * power * (1 + editionInfo.bonus);
+    ceiling = (avgScore + 1.65 * stdDev) * power * (1 + editionInfo.bonus);
+  }
+
+  if (!hasGame) {
+    floor = 0;
+    ceiling = 0;
+  }
+
+  const consistencyScore = stdDev > 0
+    ? Math.max(0, Math.min(100, Math.round(100 - (stdDev / avgScore) * 100)))
+    : 0;
+
+  const startProb = startProbability ?? (hasGame ? 0.75 : 0);
+
+  // Classify strategy tag
+  let strategyTag: StrategyTag;
+  let strategyReason: string;
+
+  if (!hasGame || startProb < 0.3) {
+    strategyTag = "RISKY";
+    strategyReason = !hasGame ? "No upcoming game" : "Low start probability";
+  } else if (consistencyScore >= 65 && startProb >= 0.7) {
+    strategyTag = "SAFE";
+    strategyReason = "Consistent pick — low variance";
+  } else if (ceiling >= avgScore * 1.4 * power) {
+    strategyTag = "CEILING";
+    strategyReason = "High upside — can explode";
+  } else {
+    strategyTag = "BALANCED";
+    strategyReason = "Solid pick — moderate variance";
+  }
+
+  return {
+    expectedScore,
+    floor,
+    ceiling,
+    stdDev,
+    consistencyScore,
+    startProbability: startProb,
+    strategyTag,
+    strategyReason,
+    isDetailedTier: isDetailed,
+  };
+}
+
+export function computeStrategyScore(metrics: CardStrategyMetrics, level: number): number {
+  const weights = LEVEL_WEIGHTS[level] || LEVEL_WEIGHTS[3];
+
+  const normalizedExpected = metrics.expectedScore;
+  const normalizedFloor = metrics.floor;
+  const normalizedCeiling = metrics.ceiling;
+  const normalizedConsistency = metrics.consistencyScore;
+  const normalizedStartProb = metrics.startProbability * 100;
+
+  let score =
+    weights.expectedScore * normalizedExpected +
+    weights.floor * normalizedFloor +
+    weights.ceiling * normalizedCeiling +
+    weights.consistency * normalizedConsistency +
+    weights.startProb * normalizedStartProb;
+
+  // Non-starter penalty escalates with level
+  if (metrics.startProbability < 0.5) {
+    const penalty = 1 - (1 - metrics.startProbability) * (0.3 + level * 0.1);
+    score *= Math.max(0.1, penalty);
+  }
+
+  return score;
+}
+
+export function scoreCardsWithStrategy(
+  cards: SorareCard[],
+  level: number,
+  starterProbs?: Record<string, number | null> | null,
+): ScoredCardWithStrategy[] {
+  return cards
+    .map((card) => {
+      const base = getExpectedPoints(card);
+      // Use real starter probability if available (value is 0-100 from batch fetch)
+      const playerSlug = card.anyPlayer?.slug;
+      const realProb = playerSlug && starterProbs?.[playerSlug] != null
+        ? starterProbs[playerSlug]! / 100
+        : undefined;
+      const strategy = computeStrategyMetrics(card, null, realProb ?? null);
+      const strategyScore = computeStrategyScore(strategy, level);
+      return { ...base, strategy, strategyScore };
+    })
+    .sort((a, b) => b.strategyScore - a.strategyScore);
+}
+
+async function fetchPlayerScores(
+  slug: string,
+  position: string,
+): Promise<PlayerGameScore[]> {
+  const res = await fetch(
+    `/api/player-scores?slug=${encodeURIComponent(slug)}&position=${encodeURIComponent(position)}`,
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.scores ?? [];
+}
+
+export async function recommendLineupWithStrategy(
+  cards: SorareCard[],
+  level: number,
+  count = 5,
+): Promise<{ lineup: ScoredCardWithStrategy[]; probability: LineupProbability }> {
+  // Tier 1: score all cards, take top candidates
+  const tier1 = scoreCardsWithStrategy(cards, level);
+  const candidates = tier1.slice(0, 15);
+
+  // Tier 2: fetch real score history for top candidates
+  const enriched = await Promise.allSettled(
+    candidates.map(async (sc) => {
+      const player = sc.card.anyPlayer;
+      if (!player) return sc;
+
+      const position = player.cardPositions?.[0] || "Goalkeeper";
+      const scores = await fetchPlayerScores(player.slug, position);
+
+      if (scores.length < 3) return sc;
+
+      const scoreValues = scores
+        .filter((s) => s.score > 0)
+        .map((s) => s.score);
+
+      // Extract start probability from game stats
+      const gamesWithStats = scores.filter((s) => s.anyPlayerGameStats);
+      let startProb = 0.75;
+      if (gamesWithStats.length > 0) {
+        const starterOdds = gamesWithStats
+          .map((s) => (s.anyPlayerGameStats?.footballPlayingStatusOdds?.starterOddsBasisPoints ?? 5000) / 10000)
+          .reduce((a, b) => a + b, 0) / gamesWithStats.length;
+        startProb = starterOdds;
+      }
+
+      const strategy = computeStrategyMetrics(sc.card, scoreValues, startProb);
+      const strategyScore = computeStrategyScore(strategy, level);
+      return { ...sc, strategy, strategyScore };
+    }),
+  );
+
+  const enrichedCards = enriched.map((result, i) =>
+    result.status === "fulfilled" ? result.value : candidates[i],
+  );
+
+  // Sort by strategy score and pick with positional diversity
+  enrichedCards.sort((a, b) => b.strategyScore - a.strategyScore);
+
+  const selected: ScoredCardWithStrategy[] = [];
+  const usedPlayerSlugs = new Set<string>();
+
+  const positionMap: Record<string, ScoredCardWithStrategy[]> = {
+    Goalkeeper: [],
+    Defender: [],
+    Midfielder: [],
+    Forward: [],
+  };
+
+  for (const sc of enrichedCards) {
+    const pos = sc.card.anyPlayer?.cardPositions?.[0];
+    if (pos && positionMap[pos]) {
+      positionMap[pos].push(sc);
+    }
+  }
+
+  // Pick best from each position first
+  for (const pos of ["Goalkeeper", "Defender", "Midfielder", "Forward"]) {
+    const playerSlug = (sc: ScoredCardWithStrategy) => sc.card.anyPlayer?.slug ?? sc.card.slug;
+    const best = positionMap[pos].find((sc) => !usedPlayerSlugs.has(playerSlug(sc)));
+    if (best && selected.length < count) {
+      selected.push(best);
+      usedPlayerSlugs.add(playerSlug(best));
+    }
+  }
+
+  // Fill remaining
+  for (const sc of enrichedCards) {
+    if (selected.length >= count) break;
+    const playerSlug = sc.card.anyPlayer?.slug ?? sc.card.slug;
+    if (!usedPlayerSlugs.has(playerSlug)) {
+      selected.push(sc);
+      usedPlayerSlugs.add(playerSlug);
+    }
+  }
+
+  const probability = estimateLineupProbability(
+    selected,
+    (LEVEL_WEIGHTS[level] ? level : 3),
+  );
+
+  return { lineup: selected, probability };
+}
+
+export function estimateLineupProbability(
+  cards: ScoredCardWithStrategy[],
+  level: number,
+): LineupProbability {
+  const thresholds: Record<number, number> = {
+    1: 280, 2: 320, 3: 360, 4: 400, 5: 440, 6: 480,
+  };
+  const threshold = thresholds[level] || 360;
+
+  const totalMean = cards.reduce((s, c) => s + c.strategy.expectedScore, 0);
+  const totalVariance = cards.reduce((s, c) => s + c.strategy.stdDev ** 2, 0);
+  const totalStdDev = Math.sqrt(totalVariance);
+
+  let successProbability = 0.5;
+  if (totalStdDev > 0) {
+    // Normal CDF approximation: P(X >= threshold)
+    const z = (totalMean - threshold) / totalStdDev;
+    successProbability = normalCDF(z);
+  } else if (totalMean >= threshold) {
+    successProbability = 1;
+  }
+
+  const confidenceLevel: LineupProbability["confidenceLevel"] =
+    successProbability >= 0.7 ? "high" :
+    successProbability >= 0.4 ? "medium" : "low";
+
+  return {
+    expectedTotal: Math.round(totalMean),
+    successProbability: Math.round(successProbability * 100) / 100,
+    confidenceLevel,
+  };
+}
+
+export function kickoffTimeFactor(dateStr: string | undefined): number {
+  if (!dateStr) return 0;
+  const hoursUntil = (new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60);
+  if (hoursUntil <= 0) return 0.3; // already started or past
+  if (hoursUntil <= 2) return 1.0;
+  if (hoursUntil <= 6) return 0.9;
+  if (hoursUntil <= 12) return 0.8;
+  if (hoursUntil <= 24) return 0.7;
+  if (hoursUntil <= 48) return 0.6;
+  return 0.5;
+}
+
+export function evaluateTimeBatch(
+  cards: SorareCard[],
+  level: number,
+): { expectedTotal: number; bestCards: ScoredCardWithStrategy[] } {
+  const scored = scoreCardsWithStrategy(cards, level);
+  const selected: ScoredCardWithStrategy[] = [];
+  const usedSlugs = new Set<string>();
+
+  for (const sc of scored) {
+    if (selected.length >= 5) break;
+    const slug = sc.card.anyPlayer?.slug ?? sc.card.slug;
+    if (!usedSlugs.has(slug)) {
+      selected.push(sc);
+      usedSlugs.add(slug);
+    }
+  }
+
+  // Captain on highest scorer
+  let captainBonus = 0;
+  if (selected.length > 0) {
+    const best = selected.reduce((a, b) => a.strategy.expectedScore > b.strategy.expectedScore ? a : b);
+    captainBonus = best.strategy.expectedScore * 0.5;
+  }
+
+  const expectedTotal = selected.reduce((s, c) => s + c.strategy.expectedScore, 0) + captainBonus;
+  return { expectedTotal: Math.round(expectedTotal), bestCards: selected };
+}
+
+export function evaluate4PlayerViability(
+  cards: SorareCard[],
+  level: number,
+  skipPosition: Position,
+): { viable: boolean; expectedTotal: number; bestCards: ScoredCardWithStrategy[] } {
+  const thresholds: Record<number, number> = { 1: 280, 2: 320, 3: 360, 4: 400, 5: 440, 6: 480 };
+  const threshold = thresholds[level] || 360;
+
+  const filtered = cards.filter((c) => c.anyPlayer?.cardPositions?.[0] !== skipPosition);
+  const scored = scoreCardsWithStrategy(filtered, level);
+  const selected: ScoredCardWithStrategy[] = [];
+  const usedSlugs = new Set<string>();
+
+  for (const sc of scored) {
+    if (selected.length >= 4) break;
+    const slug = sc.card.anyPlayer?.slug ?? sc.card.slug;
+    if (usedSlugs.has(slug)) continue;
+    if (!sc.hasGame) continue;
+    selected.push(sc);
+    usedSlugs.add(slug);
+  }
+
+  // Captain on highest scorer
+  let captainBonus = 0;
+  if (selected.length > 0) {
+    const best = selected.reduce((a, b) => a.strategy.expectedScore > b.strategy.expectedScore ? a : b);
+    captainBonus = best.strategy.expectedScore * 0.5;
+  }
+
+  const expectedTotal = Math.round(
+    selected.reduce((s, c) => s + c.strategy.expectedScore, 0) + captainBonus
+  );
+
+  return { viable: expectedTotal >= threshold, expectedTotal, bestCards: selected };
+}
+
+export function getStrategyRecommendation(level: number): string {
+  if (level <= 2) {
+    return `Level ${level} (${level === 1 ? 280 : 320} pts) — FAST mode recommended. Pick confirmed starters playing soonest. You can clear this with 4 strong players + captain. Collect reward quickly, then submit the next lineup.`;
+  }
+  if (level === 3) {
+    return `Level 3 (360 pts) — BALANCED mode. Pick solid players with good start probability. Captain your highest scorer. Consider waiting for lineup confirmations before submitting.`;
+  }
+  return `Level ${level} (${level === 4 ? 400 : level === 5 ? 440 : 480} pts) — SAFE mode. High stakes ($${level === 4 ? "50" : level === 5 ? "200" : "1,000"} reward). Use your absolute best 5 players. Wait for confirmed lineups. Captain your highest-ceiling player.`;
+}
+
+// Approximation of standard normal CDF
+function normalCDF(z: number): number {
+  if (z > 6) return 1;
+  if (z < -6) return 0;
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const p = 0.3275911;
+  const sign = z < 0 ? -1 : 1;
+  const x = Math.abs(z) / Math.sqrt(2);
+  const t = 1.0 / (1.0 + p * x);
+  const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return 0.5 * (1.0 + sign * y);
 }
