@@ -1,0 +1,81 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Settings {
+  id        Int      @id @default(1)
+  userSlug  String   @default("ba-zii")
+  updatedAt DateTime @updatedAt
+}
+
+model SavedLineup {
+  id        Int      @id @default(autoincrement())
+  name      String   @default("Default")
+  level     Int
+  slots     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CardCache {
+  id        Int      @id @default(1)
+  userSlug  String
+  cardsJson String   // Full JSON blob of cards array
+  cardCount Int
+  fetchedAt DateTime @default(now())
+}
+
+model StreakHistory {
+  id          Int      @id @default(autoincrement())
+  level       Int
+  threshold   Int
+  actualScore Int
+  success     Boolean
+  reward      String
+  playedAt    DateTime @default(now())
+}
+
+model MarketOffer {
+  id          Int      @id @default(autoincrement())
+  offerId     String   @unique
+  playerSlug  String
+  playerName  String
+  position    String?
+  rarity      String
+  priceWei    String
+  priceEth    Float
+  buyerSlug   String?
+  sellerSlug  String?
+  clubName    String?
+  cardSlug    String?
+  receivedAt  DateTime @default(now())
+
+  @@index([playerSlug, receivedAt])
+  @@index([receivedAt])
+  @@index([buyerSlug, receivedAt])
+}
+
+model MarketAlert {
+  id            Int      @id @default(autoincrement())
+  ruleType      String
+  severity      String
+  playerSlug    String?
+  playerName    String?
+  title         String
+  description   String
+  metadata      String   @default("{}")
+  acknowledged  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([playerSlug, createdAt])
+}

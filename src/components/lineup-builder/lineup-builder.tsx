@@ -17,14 +17,14 @@ export function LineupBuilder({ cards }: LineupBuilderProps) {
 
   return (
     <div className="flex flex-1 overflow-hidden h-full">
-      {/* Left: Pitch — hero area, takes remaining space */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Left: Pitch — compact */}
+      <div className="w-[45%] min-w-[400px] shrink-0 flex flex-col border-r border-zinc-800">
         <GameBoard />
         <div className="flex-1 overflow-hidden">
-          <Pitch />
+          <Pitch cards={cards} />
         </div>
         {hasCards && (
-          <div className="px-4 py-2 border-t border-zinc-800">
+          <div className="px-4 py-1.5 border-t border-zinc-800">
             <button
               onClick={clearLineup}
               className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
@@ -36,8 +36,8 @@ export function LineupBuilder({ cards }: LineupBuilderProps) {
         )}
       </div>
 
-      {/* Right: Card Picker — fixed sidebar */}
-      <div className="w-[520px] shrink-0 border-l border-zinc-800 overflow-hidden">
+      {/* Right: Card Picker — takes majority space */}
+      <div className="flex-1 min-w-0 overflow-hidden">
         <CardPicker cards={cards} />
       </div>
     </div>

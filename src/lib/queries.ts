@@ -130,6 +130,33 @@ export const PLAYER_STARTER_ODDS_QUERY = gql`
   }
 `;
 
+export const LIVE_PLAYER_SCORES_QUERY = gql`
+  query LivePlayerScores($slug: String!) {
+    anyPlayer(slug: $slug) {
+      slug
+      activeClub {
+        upcomingGames(first: 1) {
+          date
+          statusTyped
+          homeTeam { code }
+          awayTeam { code }
+          playerGameScore(playerSlug: $slug) {
+            score
+            scoreStatus
+            projectedScore
+            anyPlayerGameStats {
+              ... on PlayerGameStats {
+                minsPlayed
+                fieldStatus
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const UPCOMING_FIXTURE_QUERY = gql`
   query UpcomingFixture {
     so5 {

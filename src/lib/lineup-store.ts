@@ -64,7 +64,7 @@ export const useLineupStore = create<LineupStore>((set, get) => ({
   slots: DEFAULT_SLOTS.map((s) => ({ ...s })),
   targetScore: 280,
   currentLevel: 1,
-  selectedSlotIndex: null,
+  selectedSlotIndex: 0, // Start with GK slot selected
   strategyResults: null,
   lineupProbability: null,
   isAutoFilling: false,
@@ -90,7 +90,10 @@ export const useLineupStore = create<LineupStore>((set, get) => ({
         if (i === slotIndex) return { ...slot, card };
         return slot;
       });
-      return { slots, selectedSlotIndex: null };
+      // Auto-advance to next empty slot (GK=0, DEF=1, MID=2, FWD=3, EX=4)
+      const fillOrder = [0, 1, 2, 3, 4];
+      const nextEmpty = fillOrder.find((i) => !slots[i].card);
+      return { slots, selectedSlotIndex: nextEmpty ?? null };
     }),
 
   removeCard: (slotIndex) =>
@@ -103,7 +106,7 @@ export const useLineupStore = create<LineupStore>((set, get) => ({
   clearLineup: () =>
     set({
       slots: DEFAULT_SLOTS.map((s) => ({ ...s })),
-      selectedSlotIndex: null,
+      selectedSlotIndex: 0, // Back to GK
       strategyResults: null,
       lineupProbability: null,
     }),

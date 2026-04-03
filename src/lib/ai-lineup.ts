@@ -7,6 +7,7 @@ import type {
   ScoredCardWithStrategy,
   LineupProbability,
   PlayerGameScore,
+  PlayerIntel,
 } from "./types";
 
 export interface ScoredCard {
@@ -54,7 +55,7 @@ export function getEditionInfo(card: SorareCard): EditionInfo {
   return { bonus: 0, label: "Base", tier: "base", variation: null };
 }
 
-function getExpectedPoints(card: SorareCard): ScoredCard {
+function getExpectedPoints(card: SorareCard, fieldStatus?: string | null): ScoredCard {
   const player = card.anyPlayer;
   if (!player) {
     return { card, expectedPoints: 0, editionBonus: 0, editionLabel: "Base", hasGame: false, isHome: false, isInjured: false };
@@ -66,19 +67,20 @@ function getExpectedPoints(card: SorareCard): ScoredCard {
   const hasGame = upcomingGames.length > 0;
   const clubCode = player.activeClub?.code;
   const editionInfo = getEditionInfo(card);
+  const isInjured = fieldStatus === "INJURED" || fieldStatus === "SUSPENDED" || fieldStatus === "NOT_IN_SQUAD";
 
   // Check if home game
   const isHome = hasGame && upcomingGames[0]?.homeTeam?.code === clubCode;
 
   let expectedPoints = avgScore * power * (1 + editionInfo.bonus);
 
-  // No game = 0 points
-  if (!hasGame) {
+  // No game or injured = 0 points
+  if (!hasGame || isInjured) {
     expectedPoints = 0;
   }
 
   // Home game bonus (+5%)
-  if (isHome) {
+  if (isHome && !isInjured) {
     expectedPoints *= 1.05;
   }
 
@@ -89,12 +91,12 @@ function getExpectedPoints(card: SorareCard): ScoredCard {
     editionLabel: editionInfo.label,
     hasGame,
     isHome,
-    isInjured: false,
+    isInjured,
   };
 }
 
 export function scoreCards(cards: SorareCard[]): ScoredCard[] {
-  return cards.map(getExpectedPoints).sort((a, b) => b.expectedPoints - a.expectedPoints);
+  return cards.map((card) => getExpectedPoints(card)).sort((a, b) => b.expectedPoints - a.expectedPoints);
 }
 
 export function recommendLineup(cards: SorareCard[], count = 5): SorareCard[] {
@@ -290,16 +292,26 @@ export function scoreCardsWithStrategy(
   cards: SorareCard[],
   level: number,
   starterProbs?: Record<string, number | null> | null,
+  playerIntelMap?: Record<string, PlayerIntel> | null,
 ): ScoredCardWithStrategy[] {
   return cards
     .map((card) => {
-      const base = getExpectedPoints(card);
-      // Use real starter probability if available (value is 0-100 from batch fetch)
       const playerSlug = card.anyPlayer?.slug;
+      const intel = playerSlug ? playerIntelMap?.[playerSlug] : undefined;
+      const base = getExpectedPoints(card, intel?.fieldStatus);
+      // Use real starter probability if available (value is 0-100 from batch fetch)
       const realProb = playerSlug && starterProbs?.[playerSlug] != null
         ? starterProbs[playerSlug]! / 100
         : undefined;
       const strategy = computeStrategyMetrics(card, null, realProb ?? null);
+      // Force RISKY for unavailable players
+      if (base.isInjured) {
+        strategy.strategyTag = "RISKY";
+        strategy.strategyReason = intel?.fieldStatus === "INJURED" ? "Player is injured"
+          : intel?.fieldStatus === "SUSPENDED" ? "Player is suspended"
+          : "Player not in squad";
+        strategy.startProbability = 0;
+      }
       const strategyScore = computeStrategyScore(strategy, level);
       return { ...base, strategy, strategyScore };
     })

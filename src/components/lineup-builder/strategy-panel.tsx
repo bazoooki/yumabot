@@ -12,8 +12,9 @@ import {
   getStrategyMode,
   scoreCardsWithStrategy,
 } from "@/lib/ai-lineup";
+import { usePlayerIntel } from "@/lib/hooks";
 import type { SorareCard, Position, StrategyTag, ScoredCardWithStrategy } from "@/lib/types";
-import { Sparkles, Clock, Shield, AlertTriangle, Crown, Zap, Crosshair, SlidersHorizontal, TrendingUp, ChevronDown, ChevronRight, Users, Target } from "lucide-react";
+import { Sparkles, Clock, Shield, AlertTriangle, Crown, Zap, Crosshair, SlidersHorizontal, TrendingUp, ChevronDown, ChevronRight, Users, Target, CheckCircle2 } from "lucide-react";
 
 const TAG_COLORS: Record<StrategyTag, string> = {
   SAFE: "text-green-400 bg-green-500/15",
@@ -38,6 +39,9 @@ export function StrategyPanel({ cards }: StrategyPanelProps) {
   const recommendation = getStrategyRecommendation(currentLevel);
 
   const effectiveMode = playMode !== "auto" ? playMode : (currentLevel <= 2 ? "fast" : currentLevel <= 3 ? "balanced" : "safe");
+
+  // Player intel for warnings
+  const playerIntel = usePlayerIntel(cards);
 
   const captainIndex = slots.findIndex((s) => s.isCaptain);
   const filledCards = slots.map((s) => s.card);
@@ -117,9 +121,10 @@ export function StrategyPanel({ cards }: StrategyPanelProps) {
     });
   }, [cards, currentLevel]);
 
-  // Warnings
-  const lineupWarnings = useMemo(() => {
+  // Warnings + confirmed count
+  const { lineupWarnings, confirmedCount } = useMemo(() => {
     const warnings: string[] = [];
+    let confirmed = 0;
     if (captainIndex < 0 && filledCount > 0) {
       warnings.push("No captain assigned -- tap the crown on a player");
     }
@@ -129,9 +134,24 @@ export function StrategyPanel({ cards }: StrategyPanelProps) {
       if (!player?.activeClub?.upcomingGames?.length) {
         warnings.push(`${player?.displayName || "Unknown"} has no upcoming game`);
       }
+      const intel = player?.slug && playerIntel ? playerIntel[player.slug] : undefined;
+      if (intel) {
+        if (intel.fieldStatus === "INJURED") {
+          warnings.push(`${player?.displayName} is INJURED — will score 0 pts`);
+        } else if (intel.fieldStatus === "SUSPENDED") {
+          warnings.push(`${player?.displayName} is SUSPENDED — will score 0 pts`);
+        } else if (intel.fieldStatus === "NOT_IN_SQUAD") {
+          warnings.push(`${player?.displayName} is NOT IN SQUAD`);
+        } else if (intel.fieldStatus === "BENCH") {
+          warnings.push(`${player?.displayName} may start on BENCH — lower score expected`);
+        }
+        if (intel.reliability === "HIGH" && intel.fieldStatus === "ON_FIELD") {
+          confirmed++;
+        }
+      }
     }
-    return warnings;
-  }, [slots, captainIndex, filledCount]);
+    return { lineupWarnings: warnings, confirmedCount: confirmed };
+  }, [slots, captainIndex, filledCount, playerIntel]);
 
   const handleFillFromBatch = async (batchCards: SorareCard[]) => {
     await autoFillWithStrategy(batchCards);
@@ -291,6 +311,22 @@ export function StrategyPanel({ cards }: StrategyPanelProps) {
                 lineupProbability.confidenceLevel === "medium" ? "text-yellow-400" : "text-red-400"
               )}>
                 {Math.round(lineupProbability.successProbability * 100)}%
+              </span>
+            </div>
+          )}
+
+          {/* Confirmed lineups indicator */}
+          {filledCount > 0 && (
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-700/50">
+              <span className="text-[11px] text-zinc-500 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Confirmed starters
+              </span>
+              <span className={cn(
+                "text-sm font-bold",
+                confirmedCount === filledCount ? "text-green-400" :
+                confirmedCount > 0 ? "text-yellow-400" : "text-zinc-500"
+              )}>
+                {confirmedCount}/{filledCount}
               </span>
             </div>
           )}

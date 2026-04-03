@@ -176,6 +176,25 @@ export interface ScoredCardWithStrategy {
   strategyScore: number;
 }
 
+export interface PlayerIntel {
+  starterProbability: number | null;
+  fieldStatus: string | null;
+  reliability: string | null;
+}
+
+export interface LivePlayerScore {
+  playerSlug: string;
+  score: number;
+  projectedScore: number | null;
+  scoreStatus: string;
+  minsPlayed: number;
+  fieldStatus: string | null;
+  gameStatus: string;
+  gameDate: string;
+  homeTeam: string;
+  awayTeam: string;
+}
+
 export interface LineupProbability {
   expectedTotal: number;
   successProbability: number;

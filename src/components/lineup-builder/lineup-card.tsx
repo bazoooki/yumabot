@@ -4,7 +4,8 @@ import { memo, useState } from "react";
 import Image from "next/image";
 import { Info } from "lucide-react";
 import { cn, getKickoffUrgency, formatKickoffTime, formatKickoffDate } from "@/lib/utils";
-import { POSITION_SHORT, type SorareCard, type CardStrategyMetrics, type StrategyTag } from "@/lib/types";
+import { POSITION_SHORT, type SorareCard, type CardStrategyMetrics, type StrategyTag, type PlayerIntel } from "@/lib/types";
+import type { PlayerForm } from "@/lib/hooks";
 import { getEditionInfo } from "@/lib/ai-lineup";
 import { PlayerModal } from "./player-modal";
 
@@ -19,6 +20,8 @@ interface LineupCardProps {
   card: SorareCard;
   strategy?: CardStrategyMetrics;
   starterProbability?: number | null;
+  playerIntel?: PlayerIntel;
+  playerForm?: PlayerForm;
   disabled?: boolean;
   onClick?: () => void;
 }
@@ -27,6 +30,8 @@ export const LineupCard = memo(function LineupCard({
   card,
   strategy,
   starterProbability,
+  playerIntel,
+  playerForm,
   disabled,
   onClick,
 }: LineupCardProps) {
@@ -47,7 +52,13 @@ export const LineupCard = memo(function LineupCard({
   // undefined = not fetched yet, null = no data, number = real value
   const hasGame = upcomingGames.length > 0;
   const effectiveStarterProb = starterProbability !== undefined ? starterProbability : null;
-  const showStarterBadge = hasGame; // always show if there's a game
+  const showStarterBadge = hasGame;
+
+  // Intel-derived status
+  const fieldStatus = playerIntel?.fieldStatus;
+  const isUnavailable = fieldStatus === "INJURED" || fieldStatus === "SUSPENDED" || fieldStatus === "NOT_IN_SQUAD";
+  const isConfirmed = playerIntel?.reliability === "HIGH" && fieldStatus === "ON_FIELD";
+  const isConfirmedOut = playerIntel?.reliability === "HIGH" && (fieldStatus === "BENCH" || isUnavailable);
 
   return (
     <>
@@ -58,7 +69,9 @@ export const LineupCard = memo(function LineupCard({
         "w-full flex items-center gap-3.5 p-3 rounded-xl border transition-all text-left",
         disabled
           ? "opacity-40 cursor-not-allowed border-zinc-800 bg-zinc-900/50"
-          : "border-zinc-700/60 bg-zinc-900 hover:border-purple-500/50 hover:bg-zinc-800/80 cursor-pointer"
+          : isUnavailable
+            ? "opacity-50 border-red-500/30 bg-zinc-900 cursor-pointer"
+            : "border-zinc-700/60 bg-zinc-900 hover:border-purple-500/50 hover:bg-zinc-800/80 cursor-pointer"
       )}
     >
       {/* Card Image — scaled up and shifted to show player face, crop bottom name */}
@@ -70,24 +83,41 @@ export const LineupCard = memo(function LineupCard({
           className="object-cover object-top scale-125 -translate-y-1"
           sizes="80px"
         />
-        {/* Starter probability overlay badge — bottom center */}
+        {/* Status overlay badge — bottom center */}
         {showStarterBadge && (
           <div className={cn(
             "absolute bottom-0 inset-x-0 text-center py-0.5 text-[11px] font-bold",
-            effectiveStarterProb == null
-              ? "bg-zinc-800/80 text-zinc-500"
-              : effectiveStarterProb >= 90
+            isUnavailable
+              ? "bg-red-600 text-white"
+              : isConfirmed
                 ? "bg-green-500 text-white"
-                : effectiveStarterProb >= 70
-                  ? "bg-green-600/90 text-white"
-                  : effectiveStarterProb >= 50
-                    ? "bg-yellow-500/90 text-black"
-                    : effectiveStarterProb > 0
-                      ? "bg-red-500/90 text-white"
-                      : "bg-zinc-600 text-zinc-300"
+                : isConfirmedOut
+                  ? "bg-red-500 text-white"
+                  : effectiveStarterProb == null
+                    ? "bg-zinc-800/80 text-zinc-500"
+                    : effectiveStarterProb >= 90
+                      ? "bg-green-500 text-white"
+                      : effectiveStarterProb >= 70
+                        ? "bg-green-600/90 text-white"
+                        : effectiveStarterProb >= 50
+                          ? "bg-yellow-500/90 text-black"
+                          : effectiveStarterProb > 0
+                            ? "bg-red-500/90 text-white"
+                            : "bg-zinc-600 text-zinc-300"
           )}>
-            {effectiveStarterProb != null ? `${Math.round(effectiveStarterProb)}%` : "—%"}
+            {isUnavailable
+              ? fieldStatus === "INJURED" ? "INJURED" : fieldStatus === "SUSPENDED" ? "SUSPENDED" : "NOT IN SQUAD"
+              : isConfirmed
+                ? "CONFIRMED"
+                : isConfirmedOut
+                  ? fieldStatus === "BENCH" ? "BENCH" : "CONFIRMED OUT"
+                  : effectiveStarterProb != null ? `${Math.round(effectiveStarterProb)}%` : "—%"
+            }
           </div>
+        )}
+        {/* Red overlay tint for unavailable */}
+        {isUnavailable && (
+          <div className="absolute inset-0 bg-red-900/30 rounded-lg" />
         )}
       </div>
 
@@ -133,6 +163,18 @@ export const LineupCard = memo(function LineupCard({
           >
             {avgScore > 0 ? Math.round(avgScore) : "—"} AVG
           </span>
+          {playerForm && (
+            <span className={cn(
+              "text-[11px] font-bold",
+              playerForm.trend === "rising" ? "text-green-400" :
+              playerForm.trend === "falling" ? "text-red-400" : "text-zinc-500"
+            )}>
+              {playerForm.trend === "rising" ? "↑" : playerForm.trend === "falling" ? "↓" : "→"}
+            </span>
+          )}
+          {playerForm && playerForm.avgMinutes > 0 && (
+            <span className="text-[10px] text-zinc-500">{playerForm.avgMinutes}&apos;</span>
+          )}
           {powerBonus && (
             <span className="text-[11px] font-semibold text-purple-400">
               {powerBonus}

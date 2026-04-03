@@ -55,16 +55,21 @@ export async function GET(request: Request) {
         const starterProbability = odds
           ? odds.starterOddsBasisPoints / 10000
           : null;
+        const stats = game?.playerGameScore?.anyPlayerGameStats;
+        const fieldStatus = stats?.fieldStatus ?? null;
+        const reliability = odds?.reliability ?? null;
 
-        return { slug: s, starterProbability };
+        return { slug: s, starterProbability, fieldStatus, reliability };
       })
     );
 
-    const players: Record<string, { starterProbability: number | null }> = {};
+    const players: Record<string, { starterProbability: number | null; fieldStatus: string | null; reliability: string | null }> = {};
     for (const r of results) {
       if (r.status === "fulfilled") {
         players[r.value.slug] = {
           starterProbability: r.value.starterProbability,
+          fieldStatus: r.value.fieldStatus,
+          reliability: r.value.reliability,
         };
       }
     }
