@@ -5,7 +5,7 @@ import { Radio } from "lucide-react";
 import { useMarketStore } from "@/lib/market/market-store";
 
 export function ConnectionStatus() {
-  const { connectionStatus, offers } = useMarketStore();
+  const { connectionStatus, totalOffers } = useMarketStore();
 
   const isConnected = connectionStatus === "connected";
   const isConnecting = connectionStatus === "connecting";
@@ -45,7 +45,7 @@ export function ConnectionStatus() {
       </div>
 
       <span className="text-[10px] text-zinc-600">
-        {offers.length} offers tracked
+        {totalOffers} sales tracked
       </span>
     </div>
   );

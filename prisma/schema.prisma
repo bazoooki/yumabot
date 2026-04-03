@@ -57,6 +57,9 @@ model MarketOffer {
   sellerSlug  String?
   clubName    String?
   cardSlug    String?
+  offerType   String?
+  offerStatus String?
+  dealStatus  String?
   receivedAt  DateTime @default(now())
 
   @@index([playerSlug, receivedAt])

@@ -64,6 +64,8 @@ class MarketWebSocketManager extends EventEmitter {
   private lastHeartbeat = 0;
   private reconnectDelay = 1000;
   private identifier: string = "";
+  /** Seen offer IDs for deduplication */
+  private _seenOffers = new Map<string, string>();
 
   get status() {
     return this._status;
@@ -184,7 +186,6 @@ class MarketWebSocketManager extends EventEmitter {
         break;
 
       default:
-        // Data message
         this.handleOfferMessage(data.message as Record<string, unknown>);
         break;
     }
@@ -198,8 +199,16 @@ class MarketWebSocketManager extends EventEmitter {
 
     if (!offer) return;
 
-    // Only process accepted offers
+    // Only completed sales
     if (offer.status !== "accepted") return;
+
+    // Deduplicate
+    if (this._seenOffers.has(offer.id)) return;
+    this._seenOffers.set(offer.id, offer.status);
+    if (this._seenOffers.size > 5000) {
+      const keys = [...this._seenOffers.keys()];
+      for (let i = 0; i < 1000; i++) this._seenOffers.delete(keys[i]);
+    }
 
     const card =
       offer.receiverSide?.anyCards?.[0] || offer.senderSide?.anyCards?.[0];
@@ -209,6 +218,9 @@ class MarketWebSocketManager extends EventEmitter {
     const priceWei =
       offer.receiverSide?.wei || offer.senderSide?.wei || "0";
     const priceEth = parseFloat(priceWei) / 1e18;
+
+    // Skip if no meaningful player data
+    if (!player.displayName) return;
 
     const parsed = {
       offerId: offer.id,
@@ -222,6 +234,10 @@ class MarketWebSocketManager extends EventEmitter {
       sellerSlug: offer.sender?.slug || null,
       clubName: player.activeClub?.name || null,
       cardSlug: card.slug || null,
+      offerType: offer.type || null,
+      offerStatus: offer.status || null,
+      dealStatus: offer.dealStatus || null,
+      receivedAt: new Date().toISOString(),
     };
 
     this.emit("offer", parsed);

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo } from "react";
 import { Search, Filter } from "lucide-react";
 import { useMarketStore } from "@/lib/market/market-store";
-import { OfferCard } from "./offer-card";
+import type { PlayerActivity } from "@/lib/market/market-store";
+import { PlayerRow } from "./offer-card";
 import { RARITY_CONFIG } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { RarityType, Position } from "@/lib/types";
@@ -15,53 +16,50 @@ const POSITIONS: { key: Position; label: string }[] = [
   { key: "Forward", label: "FWD" },
 ];
 
-const RARITIES: RarityType[] = [
-  "limited",
-  "rare",
-  "super_rare",
-  "unique",
-];
+const RARITIES: RarityType[] = ["limited", "rare", "super_rare", "unique"];
+
+// Rows updated in the last 3 seconds get a subtle highlight
+const FRESH_MS = 3000;
 
 export function OfferFeed() {
-  const { offers, filters, setFilters } = useMarketStore();
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { players, totalOffers, filters, setFilters, expandedPlayer, toggleExpanded } = useMarketStore();
 
-  // Auto-scroll to top on new offers
-  useEffect(() => {
-    if (scrollRef.current && scrollRef.current.scrollTop < 100) {
-      scrollRef.current.scrollTop = 0;
+  const sorted = useMemo(() => {
+    const now = Date.now();
+    let list = Object.values(players);
+
+    // Only show players with actual sales
+    list = list.filter((p) => p.saleCount >= 1);
+
+    // Apply filters
+    if (filters.playerSearch) {
+      const q = filters.playerSearch.toLowerCase();
+      list = list.filter((p) => p.playerName.toLowerCase().includes(q));
     }
-  }, [offers.length]);
+    if (filters.rarity) {
+      list = list.filter((p) => p.rarity === filters.rarity);
+    }
+    if (filters.position) {
+      const posPrefix = filters.position.toLowerCase().slice(0, 3);
+      list = list.filter(
+        (p) => p.position?.toLowerCase().startsWith(posPrefix)
+      );
+    }
+    if (filters.minPriceEth !== null) {
+      list = list.filter((p) => p.latestPriceEth >= filters.minPriceEth!);
+    }
+    if (filters.maxPriceEth !== null) {
+      list = list.filter((p) => p.latestPriceEth <= filters.maxPriceEth!);
+    }
 
-  const filtered = useMemo(() => {
-    return offers.filter((o) => {
-      if (
-        filters.playerSearch &&
-        !o.playerName
-          .toLowerCase()
-          .includes(filters.playerSearch.toLowerCase())
-      )
-        return false;
-      if (filters.rarity && o.rarity !== filters.rarity) return false;
-      if (
-        filters.position &&
-        o.position?.toLowerCase() !==
-          filters.position.toLowerCase().slice(0, 3)
-      )
-        return false;
-      if (
-        filters.minPriceEth !== null &&
-        o.priceEth < filters.minPriceEth
-      )
-        return false;
-      if (
-        filters.maxPriceEth !== null &&
-        o.priceEth > filters.maxPriceEth
-      )
-        return false;
-      return true;
-    });
-  }, [offers, filters]);
+    // Sort by most recently active
+    list.sort((a, b) => b.updatedAt - a.updatedAt);
+
+    return list.map((p) => ({
+      player: p,
+      isNew: now - p.updatedAt < FRESH_MS,
+    }));
+  }, [players, filters]);
 
   return (
     <div className="flex flex-col h-full">
@@ -80,7 +78,6 @@ export function OfferFeed() {
 
         <Filter className="w-3.5 h-3.5 text-zinc-600" />
 
-        {/* Rarity filters */}
         {RARITIES.map((r) => {
           const conf = RARITY_CONFIG[r];
           return (
@@ -96,15 +93,12 @@ export function OfferFeed() {
                   : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
               )}
             >
-              <span
-                className={cn("w-1.5 h-1.5 rounded-full", conf.dotColor)}
-              />
+              <span className={cn("w-1.5 h-1.5 rounded-full", conf.dotColor)} />
               {conf.label}
             </button>
           );
         })}
 
-        {/* Position filters */}
         {POSITIONS.map((p) => (
           <button
             key={p.key}
@@ -123,20 +117,32 @@ export function OfferFeed() {
             {p.label}
           </button>
         ))}
+
+        <span className="text-[10px] text-zinc-600 ml-auto">
+          {Object.keys(players).length} players &middot; {totalOffers} sales
+        </span>
       </div>
 
-      {/* Offer list */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        {filtered.length === 0 ? (
+      {/* Player list — sorted by most recent activity */}
+      <div className="flex-1 overflow-y-auto">
+        {sorted.length === 0 ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-sm text-zinc-600">
-              {offers.length === 0
-                ? "Waiting for offers..."
-                : "No offers match filters"}
+              {totalOffers === 0
+                ? "Waiting for market activity..."
+                : "No players match filters"}
             </p>
           </div>
         ) : (
-          filtered.map((o, i) => <OfferCard key={`${o.offerId}-${i}`} offer={o} />)
+          sorted.map(({ player, isNew }) => (
+            <PlayerRow
+              key={player.playerSlug}
+              player={player}
+              isNew={isNew}
+              isExpanded={expandedPlayer === player.playerSlug}
+              onToggle={() => toggleExpanded(player.playerSlug)}
+            />
+          ))
         )}
       </div>
     </div>

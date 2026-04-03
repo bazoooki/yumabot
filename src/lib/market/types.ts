@@ -13,6 +13,9 @@ export interface MarketOffer {
   sellerSlug: string | null;
   clubName: string | null;
   cardSlug: string | null;
+  offerType: string | null;
+  offerStatus: string | null;
+  dealStatus: string | null;
   receivedAt: string; // ISO string on client
 }
 
@@ -56,6 +59,7 @@ export interface RawTokenOffer {
   id: string;
   status: string;
   type: string;
+  dealStatus: string | null;
   acceptedAt: string | null;
   createdAt: string;
   sender: { slug: string } | null;
