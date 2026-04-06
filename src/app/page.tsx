@@ -15,11 +15,12 @@ import { HomeDashboard } from "@/components/home-dashboard";
 import { LiveMarketTab } from "@/components/live-market/live-market-tab";
 import { RoomsList } from "@/components/rooms/rooms-list";
 import { RoomView } from "@/components/rooms/room-view";
+import { LiveGamesTab } from "@/components/live-games/live-games-tab";
 import { useFilterStore } from "@/lib/store";
 import type { CardsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "home" | "lineup" | "strategy" | "gallery" | "market" | "rooms";
+type Tab = "home" | "lineup" | "strategy" | "gallery" | "market" | "live-games" | "rooms";
 
 interface CardsApiResponse extends CardsResponse {
   cached?: boolean;
@@ -52,6 +53,7 @@ const TABS: { key: Tab; label: string; borderColor?: string }[] = [
   { key: "strategy", label: "Strategy", borderColor: "border-purple-400" },
   { key: "gallery", label: "Gallery" },
   { key: "market", label: "Live Market", borderColor: "border-green-400" },
+  { key: "live-games", label: "Live Games", borderColor: "border-cyan-400" },
   { key: "rooms", label: "Rooms", borderColor: "border-cyan-400" },
 ];
 
@@ -210,6 +212,8 @@ export default function GalleryPage() {
         )
       ) : activeTab === "market" ? (
         <LiveMarketTab cards={allCards} />
+      ) : activeTab === "live-games" ? (
+        <LiveGamesTab cards={allCards} />
       ) : activeTab === "home" ? (
         <HomeDashboard cards={allCards} onNavigate={setActiveTab} />
       ) : activeTab === "lineup" ? (

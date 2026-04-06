@@ -2,10 +2,12 @@
 
 import { forwardRef, type KeyboardEvent } from "react";
 import { Sparkles, Loader2, X } from "lucide-react";
+import { CommandBarHelp } from "./command-bar-help";
+import { cn } from "@/lib/utils";
 
 const PLACEHOLDERS: Record<string, string> = {
   market: "Ask about the market...",
-  lineup: "Ask about your lineup...",
+  lineup: "Ask anything...",
 };
 
 interface Props {
@@ -15,13 +17,26 @@ interface Props {
   onSubmit: () => void;
   onClose: () => void;
   onFocus?: () => void;
+  onSuggestion: (query: string) => void;
   isStreaming: boolean;
   isExpanded: boolean;
+  showSeparator?: boolean;
 }
 
 export const CommandBarInput = forwardRef<HTMLInputElement, Props>(
   function CommandBarInput(
-    { activeTab, value, onChange, onSubmit, onClose, onFocus, isStreaming, isExpanded },
+    {
+      activeTab,
+      value,
+      onChange,
+      onSubmit,
+      onClose,
+      onFocus,
+      onSuggestion,
+      isStreaming,
+      isExpanded,
+      showSeparator,
+    },
     ref,
   ) {
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -36,7 +51,12 @@ export const CommandBarInput = forwardRef<HTMLInputElement, Props>(
     };
 
     return (
-      <div className="flex items-center gap-3 px-4 py-2.5">
+      <div
+        className={cn(
+          "flex items-center gap-3 px-4 py-2.5",
+          showSeparator && "border-t border-zinc-800/30",
+        )}
+      >
         <Sparkles className="w-4 h-4 text-primary shrink-0" />
         <input
           ref={ref}
@@ -59,12 +79,15 @@ export const CommandBarInput = forwardRef<HTMLInputElement, Props>(
             <X className="w-3.5 h-3.5 text-zinc-500" />
           </button>
         ) : (
-          <kbd className="text-[10px] text-zinc-600 bg-zinc-800 rounded px-1.5 py-0.5 font-mono border border-zinc-700/50 shrink-0">
-            {typeof navigator !== "undefined" &&
-            navigator.platform?.includes("Mac")
-              ? "⌘K"
-              : "Ctrl+K"}
-          </kbd>
+          <>
+            <CommandBarHelp activeTab={activeTab} onSelect={onSuggestion} />
+            <kbd className="text-[10px] text-zinc-600 bg-zinc-800 rounded px-1.5 py-0.5 font-mono border border-zinc-700/50 shrink-0">
+              {typeof navigator !== "undefined" &&
+              navigator.platform?.includes("Mac")
+                ? "⌘K"
+                : "Ctrl+K"}
+            </kbd>
+          </>
         )}
       </div>
     );

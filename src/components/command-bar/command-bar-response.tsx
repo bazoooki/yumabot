@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { CommandBarLineupResult } from "./command-bar-lineup-result";
 import type { ToolCallStatus } from "@/lib/command-bar/use-command-bar";
@@ -74,62 +75,126 @@ function formatInline(text: string): React.ReactNode[] {
   });
 }
 
-interface Props {
-  text: string;
-  toolCalls: ToolCallStatus[];
-  error: string | null;
+function ToolBadges({ toolCalls }: { toolCalls: ToolCallStatus[] }) {
+  const badges = toolCalls.filter((tc) => !tc.metadata);
+  if (badges.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {badges.map((tc) => (
+        <span
+          key={tc.id}
+          className={`inline-flex items-center gap-1 text-xs ${
+            tc.status === "executed"
+              ? "text-primary"
+              : tc.status === "error"
+                ? "text-red-400"
+                : "text-zinc-500"
+          }`}
+        >
+          {tc.status === "error" ? (
+            <AlertCircle className="w-3 h-3" />
+          ) : (
+            <CheckCircle2 className="w-3 h-3" />
+          )}
+          {TOOL_LABELS[tc.name] ?? tc.name}
+        </span>
+      ))}
+    </div>
+  );
 }
 
-export function CommandBarResponse({ text, toolCalls, error }: Props) {
-  if (!text && toolCalls.length === 0 && !error) return null;
+interface DisplayMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
-  // Find rich result metadata
+interface Props {
+  messages: DisplayMessage[];
+  streamedText: string;
+  toolCalls: ToolCallStatus[];
+  error: string | null;
+  isStreaming: boolean;
+}
+
+export function CommandBarResponse({
+  messages,
+  streamedText,
+  toolCalls,
+  error,
+  isStreaming,
+}: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const hasContent =
+    messages.length > 0 || streamedText || toolCalls.length > 0 || error;
+
+  // Auto-scroll to bottom on new content
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length, streamedText, toolCalls.length, error]);
+
+  if (!hasContent) return null;
+
+  // Rich result from current tool calls
   const lineupResult = toolCalls.find(
     (tc) =>
       tc.status === "executed" &&
       tc.metadata?.type === "lineup_recommendation",
   );
 
-  // Tool calls without rich metadata (show as badges)
-  const badgeToolCalls = toolCalls.filter((tc) => !tc.metadata);
+  // Determine if the streaming text is already in messages (don't show twice)
+  const lastMsg = messages[messages.length - 1];
+  const streamingAlreadyInMessages =
+    lastMsg?.role === "assistant" && lastMsg.content === streamedText;
 
   return (
-    <div className="border-t border-zinc-800/50 px-4 py-3 max-h-[400px] overflow-y-auto space-y-3">
-      {/* Tool call badges (non-rich only) */}
-      {badgeToolCalls.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {badgeToolCalls.map((tc) => (
-            <span
-              key={tc.id}
-              className={`inline-flex items-center gap-1 text-xs ${
-                tc.status === "executed"
-                  ? "text-primary"
-                  : tc.status === "error"
-                    ? "text-red-400"
-                    : "text-zinc-500"
-              }`}
-            >
-              {tc.status === "error" ? (
-                <AlertCircle className="w-3 h-3" />
-              ) : (
-                <CheckCircle2 className="w-3 h-3" />
-              )}
-              {TOOL_LABELS[tc.name] ?? tc.name}
-            </span>
-          ))}
+    <div
+      ref={scrollRef}
+      className="border-t border-zinc-800/30 max-h-[400px] overflow-y-auto"
+    >
+      {/* Conversation messages */}
+      {messages.map((msg, i) => (
+        <div key={i} className="px-4 py-2">
+          {msg.role === "user" ? (
+            <div className="flex justify-end">
+              <div className="bg-primary/10 text-primary text-[13px] rounded-lg px-3 py-1.5 max-w-[85%]">
+                {msg.content}
+              </div>
+            </div>
+          ) : (
+            <FormattedText text={msg.content} />
+          )}
+        </div>
+      ))}
+
+      {/* Current response: tool badges + rich result + streaming text */}
+      {(toolCalls.length > 0 ||
+        (streamedText && !streamingAlreadyInMessages) ||
+        error) && (
+        <div className="px-4 py-2 space-y-3">
+          <ToolBadges toolCalls={toolCalls} />
+
+          {lineupResult?.metadata && (
+            <CommandBarLineupResult data={lineupResult.metadata} />
+          )}
+
+          {streamedText && !streamingAlreadyInMessages && (
+            <FormattedText text={streamedText} />
+          )}
+
+          {isStreaming && !streamedText && (
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              <span className="text-xs text-zinc-500">Thinking...</span>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-red-400">{error}</p>}
         </div>
       )}
-
-      {/* Rich lineup result */}
-      {lineupResult?.metadata && (
-        <CommandBarLineupResult data={lineupResult.metadata} />
-      )}
-
-      {/* AI text with markdown formatting */}
-      {text && <FormattedText text={text} />}
-
-      {/* Error */}
-      {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   );
 }

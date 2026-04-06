@@ -7,7 +7,6 @@ import { useMarketStore } from "@/lib/market/market-store";
 import { useLineupStore } from "@/lib/lineup-store";
 import { CommandBarInput } from "./command-bar-input";
 import { CommandBarResponse } from "./command-bar-response";
-import { CommandBarSuggestions } from "./command-bar-suggestions";
 import { CommandBarAdvanced } from "./command-bar-advanced";
 import { cn } from "@/lib/utils";
 
@@ -53,10 +52,24 @@ export function CommandBar({ activeTab, cards }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const { sendMessage, streamedText, toolCalls, isStreaming, error, reset } =
-    useCommandBar(activeTab, cards);
+  const {
+    sendMessage,
+    messages,
+    streamedText,
+    toolCalls,
+    isStreaming,
+    error,
+    reset,
+  } = useCommandBar(activeTab, cards);
 
-  const isExpanded = !!(streamedText || toolCalls.length > 0 || error);
+  const isExpanded = !!(
+    streamedText ||
+    toolCalls.length > 0 ||
+    error ||
+    messages.some((m) => m.role === "assistant")
+  );
+
+  const isLineup = activeTab === "lineup";
 
   const handleSubmit = useCallback(() => {
     if (!input.trim() || isStreaming) return;
@@ -94,21 +107,22 @@ export function CommandBar({ activeTab, cards }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Close when clicking outside
+  // Close when clicking outside (market/floating only)
   useEffect(() => {
+    if (isLineup) return; // inline — don't close on outside click
     if (!isFocused && !isExpanded) return;
     const handler = (e: MouseEvent) => {
       if (
         containerRef.current &&
         !containerRef.current.contains(e.target as Node)
       ) {
-        if (isExpanded) return; // keep expanded until explicitly closed
+        if (isExpanded) return;
         setIsFocused(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [isFocused, isExpanded]);
+  }, [isFocused, isExpanded, isLineup]);
 
   // Reset conversation when switching tabs
   useEffect(() => {
@@ -116,21 +130,26 @@ export function CommandBar({ activeTab, cards }: Props) {
     setInput("");
   }, [activeTab, reset]);
 
-  const isInline = activeTab === "lineup";
-
   return (
     <div
       ref={containerRef}
       className={cn(
-        "bg-zinc-900/80 backdrop-blur-sm transition-all duration-200 shrink-0",
-        isInline
-          ? "border-b border-zinc-800"
-          : "mx-4 mt-2 rounded-xl border",
-        !isInline && (isFocused || isExpanded
-          ? "border-border/50 ring-1 ring-primary/20 shadow-lg shadow-primary/5"
-          : "border-zinc-800/50"),
+        "transition-all duration-200 shrink-0 overflow-hidden",
+        isLineup
+          ? "mx-3 my-2 rounded-xl border border-primary/20 bg-gradient-to-b from-primary/[0.04] to-transparent"
+          : "mx-4 mt-2 rounded-xl border bg-zinc-900/80 backdrop-blur-sm",
+        !isLineup &&
+          (isFocused || isExpanded
+            ? "border-border/50 ring-1 ring-primary/20 shadow-lg shadow-primary/5"
+            : "border-zinc-800/50"),
       )}
     >
+      {/* Advanced (lineup only, hidden when conversation active) */}
+      {isLineup && !isExpanded && (
+        <CommandBarAdvanced onSubmit={handleSuggestion} />
+      )}
+
+      {/* Input */}
       <CommandBarInput
         ref={inputRef}
         activeTab={activeTab}
@@ -138,29 +157,20 @@ export function CommandBar({ activeTab, cards }: Props) {
         onChange={setInput}
         onSubmit={handleSubmit}
         onClose={handleClose}
+        onSuggestion={handleSuggestion}
         isStreaming={isStreaming}
         isExpanded={isExpanded}
+        showSeparator={isLineup && !isExpanded}
         onFocus={() => setIsFocused(true)}
       />
 
-      {/* Suggestions: show when focused, empty input, and not expanded */}
-      {isFocused && !input && !isExpanded && (
-        <CommandBarSuggestions
-          activeTab={activeTab}
-          onSelect={handleSuggestion}
-        />
-      )}
-
-      {/* Advanced options (lineup tab only) */}
-      {activeTab === "lineup" && !isExpanded && (
-        <CommandBarAdvanced onSubmit={handleSuggestion} />
-      )}
-
-      {/* Response area */}
+      {/* Conversation thread */}
       <CommandBarResponse
-        text={streamedText}
+        messages={messages}
+        streamedText={streamedText}
         toolCalls={toolCalls}
         error={error}
+        isStreaming={isStreaming}
       />
     </div>
   );
