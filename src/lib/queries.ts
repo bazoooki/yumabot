@@ -27,6 +27,7 @@ export const USER_CARDS_QUERY = gql`
               flagUrl
             }
             activeClub {
+              slug
               name
               code
               pictureUrl
@@ -161,6 +162,40 @@ export const UPCOMING_FIXTURE_QUERY = gql`
   query UpcomingFixture {
     so5 {
       so5Fixture(type: UPCOMING) {
+        slug
+        displayName
+        gameWeek
+        startDate
+        endDate
+        games {
+          id
+          date
+          statusTyped
+          homeTeam {
+            code
+            name
+            slug
+            pictureUrl
+          }
+          awayTeam {
+            code
+            name
+            slug
+            pictureUrl
+          }
+          competition {
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const CURRENT_FIXTURE_QUERY = gql`
+  query CurrentFixture {
+    so5 {
+      so5Fixture(type: LIVE) {
         slug
         displayName
         gameWeek

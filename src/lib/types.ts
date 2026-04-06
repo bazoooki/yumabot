@@ -27,6 +27,7 @@ export interface SorarePlayer {
     flagUrl: string;
   } | null;
   activeClub: {
+    slug: string;
     name: string;
     code?: string;
     pictureUrl: string;

@@ -1,21 +1,98 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
+/* Premium Fantasy Sports Dark Theme */
 :root {
-  --background: #0f0f0f;
-  --foreground: #ededed;
+  /* Deep dark backgrounds with subtle warmth */
+  --background: oklch(0.11 0.005 260);
+  --foreground: oklch(0.95 0 0);
+
+  /* Card surfaces - slightly elevated */
+  --card: oklch(0.14 0.005 260);
+  --card-foreground: oklch(0.95 0 0);
+
+  /* Popover - elevated surface */
+  --popover: oklch(0.16 0.005 260);
+  --popover-foreground: oklch(0.95 0 0);
+
+  /* Primary - Vibrant cyan/teal for CTAs */
+  --primary: oklch(0.75 0.18 195);
+  --primary-foreground: oklch(0.1 0.02 195);
+
+  /* Secondary - Muted surface */
+  --secondary: oklch(0.2 0.01 260);
+  --secondary-foreground: oklch(0.9 0 0);
+
+  /* Muted text and surfaces */
+  --muted: oklch(0.22 0.005 260);
+  --muted-foreground: oklch(0.55 0 0);
+
+  /* Accent - subtle highlight */
+  --accent: oklch(0.25 0.02 260);
+  --accent-foreground: oklch(0.95 0 0);
+
+  /* Destructive - red tones */
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.95 0 0);
+
+  /* Borders - subtle definition */
+  --border: oklch(0.25 0.01 260);
+  --input: oklch(0.2 0.01 260);
+  --ring: oklch(0.75 0.18 195);
+
+  --radius: 0.75rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Shimmer animation for progress bars */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
 }
 
 /* Custom scrollbar */

@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/db";
-import type { MarketAlert, AlertRuleType, AlertSeverity } from "./types";
+import type {
+  MarketAlert,
+  AlertRuleType,
+  AlertSeverity,
+  OfferLifecycleEvent,
+  CardStateEvent,
+} from "./types";
 
 interface OfferInput {
   offerId: string;
@@ -21,24 +27,31 @@ interface OfferInput {
 const WINDOW_MS = 30 * 60 * 1000;
 const COOLDOWN_MS = 20 * 60 * 1000; // 20 min cooldown per rule+player
 
-// Rarity-aware thresholds — commons trade FAR more often than rares
+const TRADEABLE_RARITIES = new Set(["limited", "rare", "super_rare", "unique"]);
+
+// Player movement thresholds
 const VOLUME_THRESHOLDS: Record<string, { warning: number; critical: number }> = {
-  common:       { warning: 15, critical: 25 },
-  limited:      { warning: 8,  critical: 15 },
-  rare:         { warning: 5,  critical: 8 },
-  super_rare:   { warning: 3,  critical: 5 },
-  unique:       { warning: 2,  critical: 3 },
-  custom_series:{ warning: 8,  critical: 15 },
+  limited:      { warning: 4,  critical: 8 },
+  rare:         { warning: 3,  critical: 5 },
+  super_rare:   { warning: 2,  critical: 3 },
+  unique:       { warning: 1,  critical: 2 },
 };
 
 const BUYER_THRESHOLDS: Record<string, { warning: number; critical: number }> = {
-  common:       { warning: 5, critical: 8 },
-  limited:      { warning: 3, critical: 5 },
-  rare:         { warning: 2, critical: 3 },
+  limited:      { warning: 4, critical: 6 },
+  rare:         { warning: 3, critical: 4 },
   super_rare:   { warning: 2, critical: 3 },
   unique:       { warning: 2, critical: 2 },
-  custom_series:{ warning: 3, critical: 5 },
 };
+
+const CANCELLATION_THRESHOLDS: Record<string, { warning: number; critical: number }> = {
+  limited:      { warning: 3, critical: 5 },
+  rare:         { warning: 2, critical: 3 },
+  super_rare:   { warning: 1, critical: 2 },
+  unique:       { warning: 1, critical: 1 },
+};
+
+const LINEUP_WINDOW_MS = 60 * 60 * 1000; // 60 min window for lineup cluster
 
 function getThreshold(map: Record<string, { warning: number; critical: number }>, rarity: string) {
   return map[rarity.toLowerCase()] || map.limited;
@@ -47,6 +60,9 @@ function getThreshold(map: Record<string, { warning: number; critical: number }>
 export async function processOffer(
   offer: OfferInput
 ): Promise<MarketAlert | null> {
+  // Skip non-tradeable rarities
+  if (!TRADEABLE_RARITIES.has(offer.rarity.toLowerCase())) return null;
+
   // Persist
   try {
     await prisma.marketOffer.create({
@@ -91,11 +107,18 @@ export async function processOffer(
   return alerts[0];
 }
 
-export async function cleanupOldOffers() {
+export async function cleanupOldData() {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  await prisma.marketOffer.deleteMany({ where: { receivedAt: { lt: cutoff } } });
-  await prisma.marketAlert.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  await Promise.all([
+    prisma.marketOffer.deleteMany({ where: { receivedAt: { lt: cutoff } } }),
+    prisma.marketAlert.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+    prisma.offerLifecycleEvent.deleteMany({ where: { receivedAt: { lt: cutoff } } }),
+    prisma.cardStateEvent.deleteMany({ where: { receivedAt: { lt: cutoff } } }),
+  ]);
 }
+
+/** @deprecated Use cleanupOldData instead */
+export const cleanupOldOffers = cleanupOldData;
 
 // --- Rule 1: Volume Spike (rarity-aware) ---
 
@@ -112,21 +135,28 @@ async function checkVolumeSpike(
 
   const severity: AlertSeverity = count >= thresh.critical ? "critical" : "warning";
 
-  // Get price context
-  const prices = await prisma.marketOffer.findMany({
+  // Get price + rarity context
+  const recentOffers = await prisma.marketOffer.findMany({
     where: { playerSlug: offer.playerSlug, receivedAt: { gte: windowStart } },
-    select: { priceEth: true },
+    select: { priceEth: true, rarity: true },
     orderBy: { receivedAt: "desc" },
   });
-  const validPrices = prices.map((p) => p.priceEth).filter((p) => p > 0);
+  const validPrices = recentOffers.map((p) => p.priceEth).filter((p) => p > 0);
   const avgPrice = validPrices.length > 0
     ? (validPrices.reduce((a, b) => a + b, 0) / validPrices.length).toFixed(4)
     : "?";
 
+  // Rarity breakdown
+  const rarityCounts: Record<string, number> = {};
+  for (const o of recentOffers) {
+    rarityCounts[o.rarity] = (rarityCounts[o.rarity] || 0) + 1;
+  }
+  const rarityBreakdown = Object.entries(rarityCounts).map(([r, c]) => `${c}x ${r}`).join(", ");
+
   return createAlertIfNotCooling("volume_spike", severity, offer, {
     title: `${offer.playerName} — ${count} sales in 30 min`,
-    description: `${count} ${offer.rarity} cards sold. Avg price: ${avgPrice} ETH. Position: ${offer.position || "?"}, Club: ${offer.clubName || "?"}.`,
-    metadata: { count, rarity: offer.rarity, avgPrice },
+    description: `${rarityBreakdown}. Avg price: ${avgPrice} ETH. ${offer.clubName || ""}.`,
+    metadata: { count, rarity: offer.rarity, avgPrice, rarityBreakdown },
   });
 }
 
@@ -205,15 +235,20 @@ async function checkBuyerConcentration(
 
 // --- Cooldown helper ---
 
+interface PlayerContext {
+  playerSlug: string;
+  playerName: string;
+}
+
 async function createAlertIfNotCooling(
   ruleType: AlertRuleType,
   severity: AlertSeverity,
-  offer: OfferInput,
+  player: PlayerContext,
   details: { title: string; description: string; metadata: Record<string, unknown> }
 ): Promise<MarketAlert | null> {
   const cooldownStart = new Date(Date.now() - COOLDOWN_MS);
   const existing = await prisma.marketAlert.count({
-    where: { ruleType, playerSlug: offer.playerSlug, createdAt: { gte: cooldownStart } },
+    where: { ruleType, playerSlug: player.playerSlug, createdAt: { gte: cooldownStart } },
   });
 
   if (existing > 0) return null;
@@ -222,8 +257,8 @@ async function createAlertIfNotCooling(
     data: {
       ruleType,
       severity,
-      playerSlug: offer.playerSlug,
-      playerName: offer.playerName,
+      playerSlug: player.playerSlug,
+      playerName: player.playerName,
       title: details.title,
       description: details.description,
       metadata: JSON.stringify(details.metadata),
@@ -242,4 +277,220 @@ async function createAlertIfNotCooling(
     acknowledged: alert.acknowledged,
     createdAt: alert.createdAt.toISOString(),
   };
+}
+
+// ══════════════════════════════════════════════════════
+// Advanced Analytics: Offer Lifecycle Rules
+// ══════════════════════════════════════════════════════
+
+export async function processOfferLifecycle(
+  event: OfferLifecycleEvent
+): Promise<MarketAlert | null> {
+  if (!TRADEABLE_RARITIES.has(event.rarity.toLowerCase())) return null;
+
+  // Persist
+  try {
+    await prisma.offerLifecycleEvent.create({
+      data: {
+        offerId: event.offerId,
+        playerSlug: event.playerSlug,
+        playerName: event.playerName,
+        status: event.status,
+        priceEth: event.priceEth,
+        previousPriceEth: event.previousPriceEth,
+        sellerSlug: event.sellerSlug,
+        cardSlug: event.cardSlug,
+      },
+    });
+  } catch {
+    // ignore duplicate inserts
+  }
+
+  const windowStart = new Date(Date.now() - WINDOW_MS);
+
+  const alerts = (
+    await Promise.all([
+      checkPriceDrop(event),
+      checkListingSurge(event, windowStart),
+      checkCancellationWave(event, windowStart),
+    ])
+  ).filter((a): a is MarketAlert => a !== null);
+
+  if (alerts.length === 0) return null;
+
+  const severityOrder: Record<string, number> = { critical: 3, warning: 2, info: 1 };
+  alerts.sort((a, b) => (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0));
+  return alerts[0];
+}
+
+// --- Rule: Price Drop ---
+
+async function checkPriceDrop(
+  event: OfferLifecycleEvent
+): Promise<MarketAlert | null> {
+  if (event.status !== "price_updated") return null;
+  if (!event.previousPriceEth || event.previousPriceEth <= 0 || event.priceEth <= 0) return null;
+
+  const dropRatio = (event.previousPriceEth - event.priceEth) / event.previousPriceEth;
+  if (dropRatio < 0.2) return null; // need at least 20% drop
+
+  const severity: AlertSeverity = dropRatio >= 0.4 ? "critical" : "warning";
+  const dropPct = (dropRatio * 100).toFixed(0);
+
+  return createAlertIfNotCooling("price_drop", severity, event, {
+    title: `${event.playerName} — ${dropPct}% price drop`,
+    description: `${event.rarity} listing dropped from ${event.previousPriceEth.toFixed(4)} to ${event.priceEth.toFixed(4)} ETH. Seller: ${event.sellerSlug || "?"}.`,
+    metadata: {
+      previousPrice: event.previousPriceEth,
+      newPrice: event.priceEth,
+      dropPct: parseFloat(dropPct),
+      rarity: event.rarity,
+      seller: event.sellerSlug,
+    },
+  });
+}
+
+// --- Rule: Listing Surge ---
+
+async function checkListingSurge(
+  event: OfferLifecycleEvent,
+  windowStart: Date
+): Promise<MarketAlert | null> {
+  if (event.status !== "created") return null;
+
+  const count = await prisma.offerLifecycleEvent.count({
+    where: {
+      playerSlug: event.playerSlug,
+      status: "created",
+      receivedAt: { gte: windowStart },
+    },
+  });
+
+  const thresh = getThreshold(VOLUME_THRESHOLDS, event.rarity);
+  if (count < thresh.warning) return null;
+
+  const severity: AlertSeverity = count >= thresh.critical ? "critical" : "warning";
+
+  return createAlertIfNotCooling("listing_surge", severity, event, {
+    title: `${event.playerName} — ${count} new listings in 30 min`,
+    description: `${event.rarity} cards being listed rapidly. Possible sell-off signal.`,
+    metadata: { count, rarity: event.rarity },
+  });
+}
+
+// --- Rule: Cancellation Wave ---
+
+async function checkCancellationWave(
+  event: OfferLifecycleEvent,
+  windowStart: Date
+): Promise<MarketAlert | null> {
+  if (event.status !== "cancelled") return null;
+
+  const count = await prisma.offerLifecycleEvent.count({
+    where: {
+      playerSlug: event.playerSlug,
+      status: "cancelled",
+      receivedAt: { gte: windowStart },
+    },
+  });
+
+  const thresh = getThreshold(CANCELLATION_THRESHOLDS, event.rarity);
+  if (count < thresh.warning) return null;
+
+  const severity: AlertSeverity = count >= thresh.critical ? "critical" : "warning";
+
+  return createAlertIfNotCooling("cancellation_wave", severity, event, {
+    title: `${event.playerName} — ${count} listings cancelled in 30 min`,
+    description: `${event.rarity} listings being pulled. Could signal incoming news or re-pricing.`,
+    metadata: { count, rarity: event.rarity },
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// Advanced Analytics: Card State (Lineup Lock) Rules
+// ══════════════════════════════════════════════════════
+
+export async function processCardState(
+  event: CardStateEvent
+): Promise<MarketAlert | null> {
+  if (!TRADEABLE_RARITIES.has(event.rarity.toLowerCase())) return null;
+
+  // Persist
+  try {
+    await prisma.cardStateEvent.create({
+      data: {
+        cardSlug: event.cardSlug,
+        playerSlug: event.playerSlug,
+        playerName: event.playerName,
+        rarity: event.rarity,
+        onSale: event.onSale,
+        inLineup: event.inLineup,
+        ownerSlug: event.ownerSlug,
+        lineupDetails: event.lineupDetails ? JSON.stringify(event.lineupDetails) : null,
+      },
+    });
+  } catch {
+    // ignore
+  }
+
+  if (!event.inLineup) return null;
+
+  const alerts = (
+    await Promise.all([
+      checkLineupLock(event),
+      checkLineupCluster(event),
+    ])
+  ).filter((a): a is MarketAlert => a !== null);
+
+  if (alerts.length === 0) return null;
+
+  const severityOrder: Record<string, number> = { critical: 3, warning: 2, info: 1 };
+  alerts.sort((a, b) => (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0));
+  return alerts[0];
+}
+
+// --- Rule: Lineup Lock (single event) ---
+
+async function checkLineupLock(
+  event: CardStateEvent
+): Promise<MarketAlert | null> {
+  const competition = event.lineupDetails?.competitionName || "SO5";
+  const gameDate = event.lineupDetails?.gameDate || "";
+
+  return createAlertIfNotCooling("lineup_lock", "info", event, {
+    title: `${event.playerName} — card locked into lineup`,
+    description: `${event.rarity} card locked for ${competition}${gameDate ? ` (${gameDate})` : ""}. Supply reduced.`,
+    metadata: {
+      cardSlug: event.cardSlug,
+      rarity: event.rarity,
+      competition,
+      gameDate,
+    },
+  });
+}
+
+// --- Rule: Lineup Cluster (multiple managers locking same player) ---
+
+async function checkLineupCluster(
+  event: CardStateEvent
+): Promise<MarketAlert | null> {
+  const windowStart = new Date(Date.now() - LINEUP_WINDOW_MS);
+
+  const count = await prisma.cardStateEvent.count({
+    where: {
+      playerSlug: event.playerSlug,
+      inLineup: true,
+      receivedAt: { gte: windowStart },
+    },
+  });
+
+  if (count < 3) return null;
+
+  const severity: AlertSeverity = count >= 5 ? "critical" : "warning";
+
+  return createAlertIfNotCooling("lineup_cluster", severity, event, {
+    title: `${event.playerName} — ${count} lineup locks in 60 min`,
+    description: `Multiple managers locking ${event.rarity} cards. Strong demand signal.`,
+    metadata: { count, rarity: event.rarity },
+  });
 }

@@ -22,7 +22,7 @@ async function fetchFromSorare(slug: string): Promise<SorareCard[]> {
   const allCards: SorareCard[] = [];
   let cursor: string | null = null;
   let page = 0;
-  const MAX_PAGES = 30;
+  const MAX_PAGES = 100;
 
   do {
     const result: CardsResponse =
@@ -35,10 +35,7 @@ async function fetchFromSorare(slug: string): Promise<SorareCard[]> {
     const connection = result?.user?.cards;
     if (!connection) break;
 
-    const stellar = connection.nodes.filter(
-      (c) => c.cardEditionName?.toLowerCase().includes("stellar")
-    );
-    allCards.push(...stellar);
+    allCards.push(...connection.nodes);
     cursor = connection.pageInfo.hasNextPage
       ? connection.pageInfo.endCursor
       : null;

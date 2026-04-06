@@ -82,3 +82,37 @@ model MarketAlert {
   @@index([createdAt])
   @@index([playerSlug, createdAt])
 }
+
+model OfferLifecycleEvent {
+  id               Int      @id @default(autoincrement())
+  offerId          String
+  playerSlug       String
+  playerName       String
+  status           String
+  priceEth         Float
+  previousPriceEth Float?
+  sellerSlug       String?
+  cardSlug         String?
+  receivedAt       DateTime @default(now())
+
+  @@index([playerSlug, receivedAt])
+  @@index([receivedAt])
+  @@index([offerId])
+}
+
+model CardStateEvent {
+  id            Int      @id @default(autoincrement())
+  cardSlug      String
+  playerSlug    String
+  playerName    String
+  rarity        String
+  onSale        Boolean
+  inLineup      Boolean
+  ownerSlug     String?
+  lineupDetails String?
+  receivedAt    DateTime @default(now())
+
+  @@index([playerSlug, receivedAt])
+  @@index([cardSlug, receivedAt])
+  @@index([receivedAt])
+}

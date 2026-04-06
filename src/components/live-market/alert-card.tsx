@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { X, TrendingUp, Users, Zap, ChevronDown } from "lucide-react";
+import {
+  X, TrendingUp, Users, Zap, ChevronDown, Briefcase, CalendarDays,
+  ArrowDown, List, XCircle, Lock,
+} from "lucide-react";
 import type { MarketAlert } from "@/lib/market/types";
 
 const SEVERITY_STYLES = {
@@ -17,12 +20,19 @@ const SEVERITY_LABEL = {
   critical: "text-red-400",
 } as const;
 
-const RULE_ICONS = {
+const RULE_ICONS: Record<string, typeof TrendingUp> = {
   volume_spike: TrendingUp,
   price_spike: Zap,
   buyer_concentration: Users,
   velocity: TrendingUp,
-} as const;
+  portfolio: Briefcase,
+  gameweek_signal: CalendarDays,
+  price_drop: ArrowDown,
+  listing_surge: List,
+  cancellation_wave: XCircle,
+  lineup_lock: Lock,
+  lineup_cluster: Users,
+};
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -134,6 +144,61 @@ export function AlertCard({
               <>
                 <MetadataRow label="Sales count" value={String(meta.count || "?")} />
                 <MetadataRow label="Window" value={String(meta.window || "?")} />
+              </>
+            )}
+            {alert.ruleType === "portfolio" && (
+              <>
+                <MetadataRow label="You own" value={String(meta.ownedCount || "?")} />
+                <MetadataRow label="Rarities" value={String(meta.ownedRarities || "?")} />
+                <MetadataRow label="Sales this session" value={String(meta.saleCount || "?")} />
+                <MetadataRow label="Latest price" value={`${typeof meta.latestPrice === 'number' ? meta.latestPrice.toFixed(4) : "?"} ETH`} />
+              </>
+            )}
+            {alert.ruleType === "gameweek_signal" && (
+              <>
+                <MetadataRow label="Signal" value={String(meta.signal || "?")} />
+                <MetadataRow label="Opponent" value={String(meta.opponent || "?")} />
+                <MetadataRow label="Game date" value={String(meta.gameDate || "?")} />
+                <MetadataRow label="Sales" value={String(meta.saleCount || "?")} />
+                {meta.isOwned && <MetadataRow label="Portfolio" value="You own this player" />}
+              </>
+            )}
+            {alert.ruleType === "price_drop" && (
+              <>
+                <MetadataRow label="Previous price" value={`${typeof meta.previousPrice === 'number' ? meta.previousPrice.toFixed(4) : "?"} ETH`} />
+                <MetadataRow label="New price" value={`${typeof meta.newPrice === 'number' ? meta.newPrice.toFixed(4) : "?"} ETH`} />
+                <MetadataRow label="Drop" value={`${meta.dropPct || "?"}%`} />
+                <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
+                <MetadataRow label="Seller" value={String(meta.seller || "?")} />
+              </>
+            )}
+            {alert.ruleType === "listing_surge" && (
+              <>
+                <MetadataRow label="New listings" value={String(meta.count || "?")} />
+                <MetadataRow label="Window" value="30 min" />
+                <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
+              </>
+            )}
+            {alert.ruleType === "cancellation_wave" && (
+              <>
+                <MetadataRow label="Cancellations" value={String(meta.count || "?")} />
+                <MetadataRow label="Window" value="30 min" />
+                <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
+              </>
+            )}
+            {alert.ruleType === "lineup_lock" && (
+              <>
+                <MetadataRow label="Card" value={String(meta.cardSlug || "?")} />
+                <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
+                <MetadataRow label="Competition" value={String(meta.competition || "?")} />
+                {meta.gameDate && <MetadataRow label="Game date" value={String(meta.gameDate)} />}
+              </>
+            )}
+            {alert.ruleType === "lineup_cluster" && (
+              <>
+                <MetadataRow label="Lineup locks" value={String(meta.count || "?")} />
+                <MetadataRow label="Window" value="60 min" />
+                <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
               </>
             )}
           </div>

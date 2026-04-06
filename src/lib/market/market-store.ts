@@ -4,11 +4,19 @@ import type {
   MarketAlert,
   MarketConnectionStatus,
   MarketFilters,
+  UpcomingGameInfo,
+  TradeType,
+  CounterCard,
+  OfferLifecycleEvent,
+  CardStateEvent,
 } from "./types";
 
 const MAX_PLAYERS = 150;
 const MAX_ALERTS = 50;
 const MAX_RECENT_OFFERS = 15;
+const MAX_LISTING_PLAYERS = 150;
+const MAX_LIFECYCLE_EVENTS = 200;
+const MAX_LINEUP_LOCKS = 100;
 
 /** A single offer event kept for the detail view */
 export interface OfferEvent {
@@ -20,6 +28,14 @@ export interface OfferEvent {
   offerStatus: string | null;
   offerType: string | null;
   receivedAt: string;
+  tradeType: TradeType;
+  cardGrade: number | null;
+  cardPower: string | null;
+  cardSeason: number | null;
+  cardSerial: number | null;
+  counterCards: CounterCard[] | null;
+  avgScore: number | null;
+  upcomingGame: UpcomingGameInfo | null;
 }
 
 /** Aggregated row per player — updates in-place instead of adding new lines */
@@ -46,10 +62,45 @@ export interface PlayerActivity {
   lastStatus: string | null;
   /** Recent individual offers for expandable detail */
   recentOffers: OfferEvent[];
+  /** Upcoming game if available */
+  upcomingGame: UpcomingGameInfo | null;
   /** Timestamp when this row was first created */
   firstSeen: number;
+  /** Trade types seen (sale, swap, mixed) */
+  tradeTypes: Set<TradeType>;
+  /** Player average score (L15) */
+  avgScore: number | null;
   /** Timestamp of last update — for "bump" animation */
   updatedAt: number;
+}
+
+/** Aggregated listing activity per player (advanced analytics) */
+export interface ListingActivity {
+  playerSlug: string;
+  playerName: string;
+  /** Offer IDs we've already counted (dedup) */
+  seenOfferIds: Set<string>;
+  activeListings: number;
+  newListings30m: number;
+  cancellations30m: number;
+  priceDrops30m: number;
+  lowestAsk: number;
+  /** Unique sellers who listed this player */
+  uniqueListers: Set<string>;
+  /** Unique sellers who cancelled this player */
+  uniqueCancellers: Set<string>;
+  recentEvents: OfferLifecycleEvent[];
+  updatedAt: number;
+}
+
+/** A lineup lock event (advanced analytics) */
+export interface LineupLockEvent {
+  cardSlug: string;
+  playerSlug: string;
+  playerName: string;
+  rarity: string;
+  lineupDetails: { competitionName: string; gameDate: string } | null;
+  receivedAt: string;
 }
 
 interface MarketState {
@@ -63,6 +114,15 @@ interface MarketState {
   /** Currently expanded player slug */
   expandedPlayer: string | null;
 
+  /** Advanced analytics toggle */
+  advancedAnalytics: boolean;
+  /** Offer lifecycle tracking per player (for anomaly engine) */
+  listingActivity: Record<string, ListingActivity>;
+  /** Chronological event feed for the analytics panel */
+  lifecycleEvents: OfferLifecycleEvent[];
+  /** Recent lineup lock events */
+  lineupLocks: LineupLockEvent[];
+
   addOffer: (offer: MarketOffer) => void;
   addAlert: (alert: MarketAlert) => void;
   setConnectionStatus: (status: MarketConnectionStatus) => void;
@@ -71,6 +131,9 @@ interface MarketState {
   toggleSound: () => void;
   toggleExpanded: (playerSlug: string) => void;
   clearOffers: () => void;
+  toggleAdvancedAnalytics: () => void;
+  addOfferLifecycleEvent: (event: OfferLifecycleEvent) => void;
+  addCardStateEvent: (event: CardStateEvent) => void;
 }
 
 export const useMarketStore = create<MarketState>((set) => ({
@@ -85,9 +148,16 @@ export const useMarketStore = create<MarketState>((set) => ({
     minPriceEth: null,
     maxPriceEth: null,
     playerSearch: "",
+    myPlayersOnly: false,
+    sort: "recent",
+    tradeType: null,
   },
   soundEnabled: false,
   expandedPlayer: null,
+  advancedAnalytics: false,
+  listingActivity: {},
+  lifecycleEvents: [],
+  lineupLocks: [],
 
   addOffer: (offer) =>
     set((s) => {
@@ -105,6 +175,14 @@ export const useMarketStore = create<MarketState>((set) => ({
         offerStatus: offer.offerStatus,
         offerType: offer.offerType,
         receivedAt: offer.receivedAt,
+        tradeType: offer.tradeType,
+        cardGrade: offer.cardGrade,
+        cardPower: offer.cardPower,
+        cardSeason: offer.cardSeason,
+        cardSerial: offer.cardSerial,
+        counterCards: offer.counterCards,
+        avgScore: offer.avgScore,
+        upcomingGame: offer.upcomingGame,
       };
 
       if (existing) {
@@ -119,9 +197,13 @@ export const useMarketStore = create<MarketState>((set) => ({
           (e) => `${e.offerId}:${e.offerStatus}` === eventKey
         );
 
+        const newTradeTypes = new Set(existing.tradeTypes);
+        newTradeTypes.add(offer.tradeType);
+
         const updated: PlayerActivity = {
           ...existing,
           offerIds: newIds,
+          tradeTypes: newTradeTypes,
           offerCount: isNewOffer ? existing.offerCount + 1 : existing.offerCount,
           saleCount: existing.saleCount + (isSale && isNewOffer ? 1 : 0),
           latestPriceEth: offer.priceEth > 0 ? offer.priceEth : existing.latestPriceEth,
@@ -135,6 +217,8 @@ export const useMarketStore = create<MarketState>((set) => ({
           recentOffers: alreadyInRecent
             ? existing.recentOffers
             : [event, ...existing.recentOffers].slice(0, MAX_RECENT_OFFERS),
+          upcomingGame: offer.upcomingGame ?? existing.upcomingGame,
+          avgScore: offer.avgScore ?? existing.avgScore,
           updatedAt: now,
         };
 
@@ -159,6 +243,9 @@ export const useMarketStore = create<MarketState>((set) => ({
         lastSeen: offer.receivedAt,
         lastStatus: offer.offerStatus,
         recentOffers: [event],
+        upcomingGame: offer.upcomingGame ?? null,
+        tradeTypes: new Set<TradeType>([offer.tradeType]),
+        avgScore: offer.avgScore ?? null,
         firstSeen: now,
         updatedAt: now,
       };
@@ -212,5 +299,128 @@ export const useMarketStore = create<MarketState>((set) => ({
       expandedPlayer: s.expandedPlayer === playerSlug ? null : playerSlug,
     })),
 
-  clearOffers: () => set({ players: {}, totalOffers: 0, expandedPlayer: null }),
+  clearOffers: () =>
+    set({ players: {}, totalOffers: 0, expandedPlayer: null, listingActivity: {}, lifecycleEvents: [], lineupLocks: [] }),
+
+  toggleAdvancedAnalytics: () =>
+    set((s) => ({ advancedAnalytics: !s.advancedAnalytics })),
+
+  addOfferLifecycleEvent: (event) =>
+    set((s) => {
+      const existing = s.listingActivity[event.playerSlug];
+      const now = Date.now();
+      const dedupeKey = `${event.offerId}:${event.status}`;
+
+      if (existing) {
+        // Deduplicate: skip if we've seen this exact offer+status
+        if (existing.seenOfferIds.has(dedupeKey)) return s;
+
+        const newSeen = new Set(existing.seenOfferIds);
+        newSeen.add(dedupeKey);
+        if (newSeen.size > 500) {
+          const arr = [...newSeen];
+          for (let i = 0; i < 100; i++) newSeen.delete(arr[i]);
+        }
+
+        // Track unique sellers
+        const newListers = new Set(existing.uniqueListers);
+        const newCancellers = new Set(existing.uniqueCancellers);
+        const seller = event.sellerSlug || "unknown";
+        if (event.status === "created") newListers.add(seller);
+        if (event.status === "cancelled") newCancellers.add(seller);
+
+        const updated: ListingActivity = {
+          ...existing,
+          seenOfferIds: newSeen,
+          updatedAt: now,
+          uniqueListers: newListers,
+          uniqueCancellers: newCancellers,
+          activeListings:
+            event.status === "created"
+              ? existing.activeListings + 1
+              : event.status === "cancelled" || event.status === "accepted" || event.status === "expired"
+                ? Math.max(0, existing.activeListings - 1)
+                : existing.activeListings,
+          newListings30m:
+            event.status === "created" ? existing.newListings30m + 1 : existing.newListings30m,
+          cancellations30m:
+            event.status === "cancelled" ? existing.cancellations30m + 1 : existing.cancellations30m,
+          priceDrops30m:
+            event.status === "price_updated" ? existing.priceDrops30m + 1 : existing.priceDrops30m,
+          lowestAsk:
+            event.priceEth > 0 && (existing.lowestAsk === 0 || event.priceEth < existing.lowestAsk)
+              ? event.priceEth
+              : existing.lowestAsk,
+          recentEvents: existing.recentEvents,
+        };
+
+        // Only add to live feed if 2+ unique people involved & not expired
+        const uniquePeople = new Set([...updated.uniqueListers, ...updated.uniqueCancellers]).size;
+        const totalEvents = updated.newListings30m + updated.cancellations30m + updated.priceDrops30m;
+        let newFeed = s.lifecycleEvents;
+        if (uniquePeople >= 2 && totalEvents >= 2 && event.status !== "expired") {
+          newFeed = [event, ...s.lifecycleEvents].slice(0, MAX_LIFECYCLE_EVENTS);
+        }
+
+        // DEBUG
+        if (totalEvents >= 2) {
+          console.log(
+            `[Analytics] ${updated.playerName} | listed=${updated.newListings30m}(${updated.uniqueListers.size}ppl) cancelled=${updated.cancellations30m}(${updated.uniqueCancellers.size}ppl) drops=${updated.priceDrops30m} active=${updated.activeListings} uniquePeople=${uniquePeople} lowest=${updated.lowestAsk.toFixed(4)}`
+          );
+        }
+
+        return {
+          listingActivity: { ...s.listingActivity, [event.playerSlug]: updated },
+          lifecycleEvents: newFeed,
+        };
+      }
+
+      const seller = event.sellerSlug || "unknown";
+      const created: ListingActivity = {
+        playerSlug: event.playerSlug,
+        playerName: event.playerName,
+        seenOfferIds: new Set([dedupeKey]),
+        activeListings: event.status === "created" ? 1 : 0,
+        newListings30m: event.status === "created" ? 1 : 0,
+        cancellations30m: event.status === "cancelled" ? 1 : 0,
+        priceDrops30m: event.status === "price_updated" ? 1 : 0,
+        lowestAsk: event.priceEth > 0 ? event.priceEth : 0,
+        uniqueListers: event.status === "created" ? new Set([seller]) : new Set(),
+        uniqueCancellers: event.status === "cancelled" ? new Set([seller]) : new Set(),
+        recentEvents: [],
+        updatedAt: now,
+      };
+
+      const activity = { ...s.listingActivity, [event.playerSlug]: created };
+
+      // LRU eviction
+      const keys = Object.keys(activity);
+      if (keys.length > MAX_LISTING_PLAYERS) {
+        const sorted = keys.sort((a, b) => activity[a].updatedAt - activity[b].updatedAt);
+        for (let i = 0; i < keys.length - MAX_LISTING_PLAYERS; i++) {
+          delete activity[sorted[i]];
+        }
+      }
+
+      // First event for a new player — never qualifies for feed yet
+      return { listingActivity: activity };
+    }),
+
+  addCardStateEvent: (event) =>
+    set((s) => {
+      if (!event.inLineup) return s;
+
+      const lock: LineupLockEvent = {
+        cardSlug: event.cardSlug,
+        playerSlug: event.playerSlug,
+        playerName: event.playerName,
+        rarity: event.rarity,
+        lineupDetails: event.lineupDetails,
+        receivedAt: event.receivedAt,
+      };
+
+      return {
+        lineupLocks: [lock, ...s.lineupLocks].slice(0, MAX_LINEUP_LOCKS),
+      };
+    }),
 }));

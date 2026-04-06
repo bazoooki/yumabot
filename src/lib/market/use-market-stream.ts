@@ -2,7 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { useMarketStore } from "./market-store";
-import type { MarketOffer, MarketAlert, MarketConnectionStatus } from "./types";
+import type {
+  MarketOffer,
+  MarketAlert,
+  MarketConnectionStatus,
+  OfferLifecycleEvent,
+  CardStateEvent,
+} from "./types";
 
 function playAlertSound() {
   try {
@@ -27,6 +33,9 @@ export function useMarketStream() {
     addAlert,
     setConnectionStatus,
     soundEnabled,
+    advancedAnalytics,
+    addOfferLifecycleEvent,
+    addCardStateEvent,
   } = useMarketStore();
   const soundRef = useRef(soundEnabled);
   soundRef.current = soundEnabled;
@@ -34,7 +43,10 @@ export function useMarketStream() {
   useEffect(() => {
     setConnectionStatus("connecting");
 
-    const es = new EventSource("/api/market/stream");
+    const url = advancedAnalytics
+      ? "/api/market/stream?advanced=true"
+      : "/api/market/stream";
+    const es = new EventSource(url);
 
     es.addEventListener("offer", (e) => {
       try {
@@ -68,6 +80,24 @@ export function useMarketStream() {
       }
     });
 
+    es.addEventListener("offer_lifecycle", (e) => {
+      try {
+        const event: OfferLifecycleEvent = JSON.parse(e.data);
+        addOfferLifecycleEvent(event);
+      } catch {
+        // ignore
+      }
+    });
+
+    es.addEventListener("card_state", (e) => {
+      try {
+        const event: CardStateEvent = JSON.parse(e.data);
+        addCardStateEvent(event);
+      } catch {
+        // ignore
+      }
+    });
+
     es.onopen = () => {
       // Status will come from the server's first status event
     };
@@ -81,6 +111,7 @@ export function useMarketStream() {
       es.close();
       setConnectionStatus("disconnected");
     };
+    // Reconnect when advanced analytics toggle changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [advancedAnalytics]);
 }

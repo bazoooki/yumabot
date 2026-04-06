@@ -13,11 +13,13 @@ import { LineupBuilder } from "@/components/lineup-builder/lineup-builder";
 import { StrategyDashboard } from "@/components/strategy-dashboard";
 import { HomeDashboard } from "@/components/home-dashboard";
 import { LiveMarketTab } from "@/components/live-market/live-market-tab";
+import { RoomsList } from "@/components/rooms/rooms-list";
+import { RoomView } from "@/components/rooms/room-view";
 import { useFilterStore } from "@/lib/store";
 import type { CardsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "home" | "lineup" | "strategy" | "gallery" | "market";
+type Tab = "home" | "lineup" | "strategy" | "gallery" | "market" | "rooms";
 
 interface CardsApiResponse extends CardsResponse {
   cached?: boolean;
@@ -30,9 +32,13 @@ async function fetchSettings(): Promise<{ userSlug: string }> {
   return res.json();
 }
 
-async function fetchCards(slug: string, refresh = false): Promise<CardsApiResponse> {
+async function fetchCards(slug: string, refresh = false, retries = 2): Promise<CardsApiResponse> {
   const url = `/api/cards?slug=${slug}${refresh ? "&refresh=true" : ""}`;
   const res = await fetch(url);
+  if (res.status === 429 && retries > 0) {
+    await new Promise((r) => setTimeout(r, 3000));
+    return fetchCards(slug, refresh, retries - 1);
+  }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || "Failed to fetch cards");
@@ -46,10 +52,12 @@ const TABS: { key: Tab; label: string; borderColor?: string }[] = [
   { key: "strategy", label: "Strategy", borderColor: "border-purple-400" },
   { key: "gallery", label: "Gallery" },
   { key: "market", label: "Live Market", borderColor: "border-green-400" },
+  { key: "rooms", label: "Rooms", borderColor: "border-cyan-400" },
 ];
 
 export default function GalleryPage() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { filters } = useFilterStore();
   const queryClient = useQueryClient();
@@ -186,8 +194,22 @@ export default function GalleryPage() {
             <p className="text-sm text-zinc-500">Loading cards...</p>
           </div>
         </div>
+      ) : activeTab === "rooms" ? (
+        activeRoomId ? (
+          <RoomView
+            roomId={activeRoomId}
+            userSlug={userSlug}
+            cards={allCards}
+            onBack={() => setActiveRoomId(null)}
+          />
+        ) : (
+          <RoomsList
+            userSlug={userSlug}
+            onEnterRoom={(id) => setActiveRoomId(id)}
+          />
+        )
       ) : activeTab === "market" ? (
-        <LiveMarketTab />
+        <LiveMarketTab cards={allCards} />
       ) : activeTab === "home" ? (
         <HomeDashboard cards={allCards} onNavigate={setActiveTab} />
       ) : activeTab === "lineup" ? (
