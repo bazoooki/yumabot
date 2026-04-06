@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Search, Filter, Briefcase, ArrowUpDown } from "lucide-react";
+import { Search, Briefcase, ArrowUpDown, Sparkles } from "lucide-react";
 import { useMarketStore } from "@/lib/market/market-store";
 import { lookupOwned } from "@/lib/market/portfolio-utils";
 import type { PortfolioIndex } from "@/lib/market/portfolio-utils";
@@ -29,8 +29,8 @@ const TRADE_TYPES: { key: TradeType; label: string }[] = [
 const SORT_OPTIONS: { key: MarketSort; label: string }[] = [
   { key: "recent", label: "Recent" },
   { key: "sales", label: "Most Sales" },
-  { key: "price_high", label: "Price ↑" },
-  { key: "price_low", label: "Price ↓" },
+  { key: "price_high", label: "Price \u2191" },
+  { key: "price_low", label: "Price \u2193" },
   { key: "score", label: "Avg Score" },
 ];
 
@@ -43,14 +43,11 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
     const now = Date.now();
     let list = Object.values(players);
 
-    // Only players with 2+ sales (skip single-sale noise)
-    list = list.filter((p) => p.saleCount >= 2);
+    list = list.filter((p) => p.saleCount >= filters.minSales);
 
-    // My Players filter
     if (filters.myPlayersOnly) {
       list = list.filter((p) => !!lookupOwned(portfolio, p.playerSlug, p.playerName));
     }
-
     if (filters.playerSearch) {
       const q = filters.playerSearch.toLowerCase();
       list = list.filter((p) => p.playerName.toLowerCase().includes(q));
@@ -100,114 +97,157 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800 flex-wrap">
-        <div className="relative flex-1 min-w-[140px]">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" />
+      {/* Row 1: Search + Filters */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 flex-wrap">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[160px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search player..."
             value={filters.playerSearch}
             onChange={(e) => setFilters({ playerSearch: e.target.value })}
-            className="w-full pl-7 pr-2 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600"
+            className="w-full pl-10 pr-3 py-2 bg-secondary/30 border border-border/50 rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
           />
         </div>
 
-        {/* My Players toggle */}
+        {/* My Players */}
         <button
           onClick={() => setFilters({ myPlayersOnly: !filters.myPlayersOnly })}
           className={cn(
-            "flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors",
+            "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border",
             filters.myPlayersOnly
-              ? "bg-purple-600/30 text-purple-300 border border-purple-500/50"
-              : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+              ? "bg-primary/10 text-primary border-primary/30"
+              : "bg-secondary/30 text-muted-foreground border-border/50 hover:bg-secondary/50"
           )}
         >
-          <Briefcase className="w-3 h-3" />
-          My Players
+          <Briefcase className="w-3.5 h-3.5" />
+          Mine
         </button>
 
-        <Filter className="w-3.5 h-3.5 text-zinc-600" />
+        <div className="w-px h-6 bg-border/50" />
 
-        {RARITIES.map((r) => {
-          const conf = RARITY_CONFIG[r];
-          return (
+        {/* Rarity group */}
+        <div className="flex items-center gap-0.5 p-1 rounded-xl bg-secondary/30 border border-border/50">
+          {RARITIES.map((r) => {
+            const conf = RARITY_CONFIG[r];
+            return (
+              <button
+                key={r}
+                onClick={() => setFilters({ rarity: filters.rarity === r ? null : r })}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200",
+                  filters.rarity === r
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className={cn("w-2 h-2 rounded-full", conf.dotColor)} />
+                {conf.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Position group */}
+        <div className="flex items-center gap-0.5 p-1 rounded-xl bg-secondary/30 border border-border/50">
+          {POSITIONS.map((p) => (
             <button
-              key={r}
-              onClick={() => setFilters({ rarity: filters.rarity === r ? null : r })}
+              key={p.key}
+              onClick={() => setFilters({ position: filters.position === p.key ? null : p.key })}
               className={cn(
-                "flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors",
-                filters.rarity === r
-                  ? "bg-zinc-700 text-white"
-                  : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                "px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all duration-200",
+                filters.position === p.key
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <span className={cn("w-1.5 h-1.5 rounded-full", conf.dotColor)} />
-              {conf.label}
+              {p.label}
             </button>
-          );
-        })}
+          ))}
+        </div>
 
-        {POSITIONS.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => setFilters({ position: filters.position === p.key ? null : p.key })}
-            className={cn(
-              "px-2 py-1 rounded text-[10px] font-mono font-medium transition-colors",
-              filters.position === p.key
-                ? "bg-zinc-700 text-white"
-                : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
-
+        {/* Trade types */}
         {TRADE_TYPES.map((t) => (
           <button
             key={t.key}
             onClick={() => setFilters({ tradeType: filters.tradeType === t.key ? null : t.key })}
             className={cn(
-              "px-2 py-1 rounded text-[10px] font-medium transition-colors",
+              "px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
               filters.tradeType === t.key
-                ? "bg-zinc-700 text-white"
-                : "text-zinc-600 hover:text-zinc-300"
+                ? "text-foreground font-semibold"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             {t.label}
           </button>
         ))}
+      </div>
 
-        <span className="text-zinc-700 mx-0.5">|</span>
-        <ArrowUpDown className="w-3 h-3 text-zinc-600" />
+      {/* Row 2: Sort + Min Sales + Stats */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-border/50">
+        <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
         {SORT_OPTIONS.map((s) => (
           <button
             key={s.key}
             onClick={() => setFilters({ sort: s.key })}
             className={cn(
-              "px-2 py-1 rounded text-[10px] font-medium transition-colors",
+              "px-2 py-1 rounded-lg text-xs transition-all duration-200",
               filters.sort === s.key
-                ? "bg-zinc-700 text-white"
-                : "text-zinc-600 hover:text-zinc-300"
+                ? "text-foreground font-bold"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             {s.label}
           </button>
         ))}
 
-        <span className="text-[10px] text-zinc-600 ml-auto">
-          {Object.keys(players).length} players &middot; {totalOffers} sales
+        <div className="w-px h-5 bg-border/50" />
+
+        {/* Min sales stepper */}
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">Min</span>
+          <div className="flex items-center rounded-lg bg-secondary/30 border border-border/50">
+            <button
+              onClick={() => setFilters({ minSales: Math.max(1, filters.minSales - 1) })}
+              className="px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              -
+            </button>
+            <span className="px-1.5 py-0.5 text-xs font-bold text-foreground tabular-nums min-w-[20px] text-center">
+              {filters.minSales}
+            </span>
+            <button
+              onClick={() => setFilters({ minSales: filters.minSales + 1 })}
+              className="px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              +
+            </button>
+          </div>
+          <span className="text-xs text-muted-foreground">sales</span>
+        </div>
+
+        <span className="ml-auto text-xs text-muted-foreground">
+          {sorted.length} players &middot; {totalOffers} sales
         </span>
       </div>
 
       {/* Player list */}
       <div className="flex-1 overflow-y-auto">
         {sorted.length === 0 ? (
-          <div className="flex items-center justify-center py-16">
-            <p className="text-sm text-zinc-600">
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-secondary/30 flex items-center justify-center">
+              <Sparkles className="w-7 h-7 text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground">
               {totalOffers === 0
                 ? "Waiting for market activity..."
                 : "No players match filters"}
+            </p>
+            <p className="text-xs text-muted-foreground/60">
+              {totalOffers === 0
+                ? "Sales will appear here in real-time"
+                : "Try adjusting your filters"}
             </p>
           </div>
         ) : (

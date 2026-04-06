@@ -7,9 +7,9 @@ import type { OwnedPlayerInfo } from "@/lib/market/portfolio-utils";
 import { ChevronDown, TrendingUp, TrendingDown, Minus, ArrowRightLeft, Briefcase, CalendarDays } from "lucide-react";
 
 function timeAgo(iso: string | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "\u2014";
   const ms = Date.now() - new Date(iso).getTime();
-  if (isNaN(ms)) return "—";
+  if (isNaN(ms)) return "\u2014";
   if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`;
   return `${Math.floor(ms / 3_600_000)}h`;
@@ -29,7 +29,7 @@ function priceTrend(prices: number[]): "up" | "down" | "flat" {
 }
 
 function formatEth(eth: number): string {
-  if (!eth || eth <= 0 || isNaN(eth)) return "—";
+  if (!eth || eth <= 0 || isNaN(eth)) return "\u2014";
   if (eth < 0.001) return "<0.001";
   if (eth < 1) return eth.toFixed(4);
   return eth.toFixed(3);
@@ -45,14 +45,8 @@ function formatGameChip(player: PlayerActivity): string | null {
   const opponent = isHome ? game.awayTeam.code : game.homeTeam.code;
   const ha = isHome ? "H" : "A";
   const when = days === 0 ? "today" : days === 1 ? "tmrw" : `${days}d`;
-  return `${isHome ? "vs" : "@"} ${opponent} (${ha}) · ${when}`;
+  return `${isHome ? "vs" : "@"} ${opponent} (${ha}) \u00b7 ${when}`;
 }
-
-const TRADE_BADGE: Record<string, { label: string; cls: string }> = {
-  sale: { label: "SALE", cls: "bg-green-500/15 text-green-400" },
-  swap: { label: "SWAP", cls: "bg-blue-500/15 text-blue-400" },
-  mixed: { label: "MIXED", cls: "bg-purple-500/15 text-purple-400" },
-};
 
 function formatPower(power: string | null): string | null {
   if (!power) return null;
@@ -63,55 +57,17 @@ function formatPower(power: string | null): string | null {
 
 function OfferDetailRow({ event }: { event: OfferEvent }) {
   const rarityConf = RARITY_CONFIG[event.rarity] || RARITY_CONFIG.common;
-  const badge = TRADE_BADGE[event.tradeType] || TRADE_BADGE.sale;
-  const power = formatPower(event.cardPower);
 
   return (
-    <div className="px-4 py-1.5 border-b border-zinc-800/30 last:border-0 space-y-0.5">
-      {/* Main row */}
-      <div className="flex items-center gap-2 text-[11px]">
-        <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", rarityConf.dotColor)} />
-        <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0", badge.cls)}>
-          {badge.label}
-        </span>
-        <span className="text-zinc-300 font-medium">{formatEth(event.priceEth)} ETH</span>
-        <span className="flex items-center gap-1 text-zinc-600 flex-1 min-w-0 truncate">
-          {event.sellerSlug || "?"} <ArrowRightLeft className="w-3 h-3 shrink-0" /> {event.buyerSlug || "?"}
-        </span>
-        <span className="text-zinc-600 shrink-0">{timeAgo(event.receivedAt)}</span>
-      </div>
-      {/* Card metadata + counter cards */}
-      {(event.cardGrade != null || event.cardSeason || power || event.avgScore || event.upcomingGame || event.counterCards) && (
-        <div className="flex items-center gap-2 pl-4 text-[10px]">
-          {event.avgScore != null && event.avgScore > 0 && (
-            <span className={cn(
-              "font-semibold px-1 rounded",
-              event.avgScore >= 60 ? "bg-green-500/15 text-green-400" :
-              event.avgScore >= 40 ? "bg-yellow-500/15 text-yellow-400" :
-              "text-zinc-500"
-            )}>
-              L15: {Math.round(event.avgScore)}
-            </span>
-          )}
-          {event.cardGrade != null && (
-            <span className="text-zinc-500">Lv.{event.cardGrade}</span>
-          )}
-          {power && <span className="text-zinc-500">{power}</span>}
-          {event.cardSeason && (
-            <span className="text-zinc-500">{event.cardSeason}-{String(event.cardSeason + 1).slice(2)}</span>
-          )}
-          {event.upcomingGame && (
-            <span className="text-green-400/60">
-              {event.upcomingGame.homeTeam.code} vs {event.upcomingGame.awayTeam.code}
-            </span>
-          )}
-          {event.counterCards && event.counterCards.length > 0 && (
-            <span className="text-blue-400/70 truncate">
-              for: {event.counterCards.map((c) => `${c.playerName} (${c.rarity})`).join(", ")}
-            </span>
-          )}
-        </div>
-      )}
+    <div className="flex items-center gap-3 px-4 py-2 text-xs border-b border-border/30 last:border-0">
+      <span className={cn("w-2 h-2 rounded-full shrink-0", rarityConf.dotColor)} />
+      <span className="text-foreground font-semibold w-24 shrink-0">{formatEth(event.priceEth)} ETH</span>
+      <span className="flex items-center gap-1.5 text-muted-foreground flex-1 min-w-0 truncate">
+        <span className="truncate">{event.sellerSlug || "?"}</span>
+        <ArrowRightLeft className="w-3 h-3 shrink-0 text-muted-foreground/50" />
+        <span className="truncate">{event.buyerSlug || "?"}</span>
+      </span>
+      <span className="text-muted-foreground/60 shrink-0 text-[10px]">{timeAgo(event.receivedAt)}</span>
     </div>
   );
 }
@@ -132,54 +88,50 @@ export function PlayerRow({
   const rarityConf = RARITY_CONFIG[player.rarity] || RARITY_CONFIG.common;
   const posShort = player.position
     ? player.position.slice(0, 3).toUpperCase()
-    : "—";
+    : "\u2014";
   const trend = priceTrend(player.prices);
   const gameChip = formatGameChip(player);
 
   return (
     <div className={cn(
-      "border-b border-zinc-800/50 transition-colors duration-500",
-      isNew && "bg-zinc-800/30",
-      owned && "border-l-2 border-l-purple-500",
+      "border-b border-border/30 transition-all duration-300",
+      isNew && "bg-primary/5",
+      owned && "border-l-2 border-l-primary",
     )}>
-      {/* Main row — clickable */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800/20 transition-colors cursor-pointer text-left"
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/30 transition-all duration-200 cursor-pointer text-left"
       >
-        {/* Rarity dot */}
-        <span className={cn("w-2 h-2 rounded-full shrink-0", rarityConf.dotColor)} />
+        <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", rarityConf.dotColor)} />
 
-        {/* Player info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-white truncate">
+            <span className="text-sm font-semibold text-foreground truncate">
               {player.playerName}
             </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono shrink-0">
+            <span className="text-[10px] px-2 py-0.5 rounded-lg bg-secondary/50 text-muted-foreground font-mono shrink-0 border border-border/30">
               {posShort}
             </span>
-            <span className="text-[10px] text-zinc-600 truncate hidden sm:inline">
+            <span className="text-[10px] text-muted-foreground truncate hidden sm:inline">
               {player.clubName || ""}
             </span>
             {owned && (
-              <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-semibold shrink-0">
-                <Briefcase className="w-2.5 h-2.5" />
+              <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold shrink-0 border border-primary/20">
+                <Briefcase className="w-3 h-3" />
                 {owned.cardCount}x
               </span>
             )}
           </div>
-          {/* Second line: game chip + owned rarities */}
           {(gameChip || owned) && (
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-1">
               {gameChip && (
-                <span className="flex items-center gap-1 text-[10px] text-green-400/80">
+                <span className="flex items-center gap-1 text-[10px] text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20">
                   <CalendarDays className="w-3 h-3" />
                   {gameChip}
                 </span>
               )}
               {owned && (
-                <span className="text-[10px] text-purple-400/60">
+                <span className="text-[10px] text-primary/60">
                   {owned.rarities.join(", ")}
                 </span>
               )}
@@ -187,38 +139,45 @@ export function PlayerRow({
           )}
         </div>
 
-        {/* Sale count */}
-        <span className={cn(
-          "text-[10px] font-bold tabular-nums shrink-0",
-          player.saleCount >= 5 ? "text-red-400" : player.saleCount >= 3 ? "text-amber-400" : "text-green-500/80",
+        {/* Sale count pill */}
+        <div className={cn(
+          "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 border",
+          player.saleCount >= 5
+            ? "bg-red-500/10 text-red-400 border-red-500/20"
+            : player.saleCount >= 3
+              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+              : "bg-green-500/10 text-green-400 border-green-500/20",
         )}>
           {player.saleCount} sale{player.saleCount !== 1 ? "s" : ""}
-        </span>
-
-        {/* Price + trend */}
-        <div className="flex items-center gap-1 shrink-0">
-          {trend === "up" && <TrendingUp className="w-3 h-3 text-green-400" />}
-          {trend === "down" && <TrendingDown className="w-3 h-3 text-red-400" />}
-          {trend === "flat" && player.prices.length >= 2 && <Minus className="w-3 h-3 text-zinc-600" />}
-          <span className="text-sm font-semibold text-white tabular-nums">
-            {formatEth(player.latestPriceEth)}
-          </span>
-          <span className="text-[10px] text-zinc-600">ETH</span>
         </div>
 
-        {/* Time + chevron */}
-        <span className="text-[10px] text-zinc-600 shrink-0 w-8 text-right tabular-nums">
+        {/* Price + trend pill */}
+        <div className={cn(
+          "flex items-center gap-1 px-2 py-1 rounded-lg shrink-0",
+          trend === "up" ? "bg-green-500/10" :
+          trend === "down" ? "bg-red-500/10" :
+          "bg-secondary/30"
+        )}>
+          {trend === "up" && <TrendingUp className="w-3.5 h-3.5 text-green-400" />}
+          {trend === "down" && <TrendingDown className="w-3.5 h-3.5 text-red-400" />}
+          {trend === "flat" && player.prices.length >= 2 && <Minus className="w-3.5 h-3.5 text-muted-foreground" />}
+          <span className="text-sm font-bold text-foreground tabular-nums">
+            {formatEth(player.latestPriceEth)}
+          </span>
+          <span className="text-[10px] text-muted-foreground">ETH</span>
+        </div>
+
+        <span className="text-[10px] text-muted-foreground shrink-0 w-8 text-right tabular-nums">
           {timeAgo(player.lastSeen)}
         </span>
         <ChevronDown className={cn(
-          "w-3.5 h-3.5 text-zinc-600 transition-transform shrink-0",
+          "w-4 h-4 text-muted-foreground transition-transform duration-200 shrink-0",
           isExpanded && "rotate-180",
         )} />
       </button>
 
-      {/* Expanded detail */}
       {isExpanded && player.recentOffers.length > 0 && (
-        <div className="bg-zinc-900/60 border-t border-zinc-800/50">
+        <div className="bg-secondary/20 border-t border-border/30">
           {player.recentOffers.map((e) => (
             <OfferDetailRow key={`${e.offerId}-${e.offerStatus}`} event={e} />
           ))}

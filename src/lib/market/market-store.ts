@@ -15,7 +15,6 @@ const MAX_PLAYERS = 150;
 const MAX_ALERTS = 50;
 const MAX_RECENT_OFFERS = 15;
 const MAX_LISTING_PLAYERS = 150;
-const MAX_LIFECYCLE_EVENTS = 200;
 const MAX_LINEUP_LOCKS = 100;
 
 /** A single offer event kept for the detail view */
@@ -118,8 +117,6 @@ interface MarketState {
   advancedAnalytics: boolean;
   /** Offer lifecycle tracking per player (for anomaly engine) */
   listingActivity: Record<string, ListingActivity>;
-  /** Chronological event feed for the analytics panel */
-  lifecycleEvents: OfferLifecycleEvent[];
   /** Recent lineup lock events */
   lineupLocks: LineupLockEvent[];
 
@@ -131,6 +128,7 @@ interface MarketState {
   toggleSound: () => void;
   toggleExpanded: (playerSlug: string) => void;
   clearOffers: () => void;
+  clearAlerts: () => void;
   toggleAdvancedAnalytics: () => void;
   addOfferLifecycleEvent: (event: OfferLifecycleEvent) => void;
   addCardStateEvent: (event: CardStateEvent) => void;
@@ -151,12 +149,12 @@ export const useMarketStore = create<MarketState>((set) => ({
     myPlayersOnly: false,
     sort: "recent",
     tradeType: null,
+    minSales: 2,
   },
   soundEnabled: false,
   expandedPlayer: null,
   advancedAnalytics: false,
   listingActivity: {},
-  lifecycleEvents: [],
   lineupLocks: [],
 
   addOffer: (offer) =>
@@ -300,7 +298,10 @@ export const useMarketStore = create<MarketState>((set) => ({
     })),
 
   clearOffers: () =>
-    set({ players: {}, totalOffers: 0, expandedPlayer: null, listingActivity: {}, lifecycleEvents: [], lineupLocks: [] }),
+    set({ players: {}, totalOffers: 0, expandedPlayer: null, listingActivity: {}, lineupLocks: [] }),
+
+  clearAlerts: () =>
+    set({ alerts: [], unacknowledgedCount: 0 }),
 
   toggleAdvancedAnalytics: () =>
     set((s) => ({ advancedAnalytics: !s.advancedAnalytics })),
@@ -354,24 +355,8 @@ export const useMarketStore = create<MarketState>((set) => ({
           recentEvents: existing.recentEvents,
         };
 
-        // Only add to live feed if 2+ unique people involved & not expired
-        const uniquePeople = new Set([...updated.uniqueListers, ...updated.uniqueCancellers]).size;
-        const totalEvents = updated.newListings30m + updated.cancellations30m + updated.priceDrops30m;
-        let newFeed = s.lifecycleEvents;
-        if (uniquePeople >= 2 && totalEvents >= 2 && event.status !== "expired") {
-          newFeed = [event, ...s.lifecycleEvents].slice(0, MAX_LIFECYCLE_EVENTS);
-        }
-
-        // DEBUG
-        if (totalEvents >= 2) {
-          console.log(
-            `[Analytics] ${updated.playerName} | listed=${updated.newListings30m}(${updated.uniqueListers.size}ppl) cancelled=${updated.cancellations30m}(${updated.uniqueCancellers.size}ppl) drops=${updated.priceDrops30m} active=${updated.activeListings} uniquePeople=${uniquePeople} lowest=${updated.lowestAsk.toFixed(4)}`
-          );
-        }
-
         return {
           listingActivity: { ...s.listingActivity, [event.playerSlug]: updated },
-          lifecycleEvents: newFeed,
         };
       }
 

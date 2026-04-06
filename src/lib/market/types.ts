@@ -78,6 +78,7 @@ export interface MarketFilters {
   myPlayersOnly: boolean;
   sort: MarketSort;
   tradeType: TradeType | null;
+  minSales: number;
 }
 
 // Raw data from Sorare's tokenOfferWasUpdated subscription

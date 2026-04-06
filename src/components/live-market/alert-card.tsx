@@ -9,15 +9,21 @@ import {
 import type { MarketAlert } from "@/lib/market/types";
 
 const SEVERITY_STYLES = {
-  info: "border-l-blue-400",
-  warning: "border-l-amber-400",
-  critical: "border-l-red-400 bg-red-950/20",
-} as const;
-
-const SEVERITY_LABEL = {
-  info: "text-blue-400",
-  warning: "text-amber-400",
-  critical: "text-red-400",
+  info: {
+    card: "bg-gradient-to-br from-blue-500/10 to-blue-500/5 border-blue-500/20",
+    icon: "bg-blue-500/10 text-blue-400",
+    badge: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  },
+  warning: {
+    card: "bg-gradient-to-br from-amber-500/10 to-amber-500/5 border-amber-500/20",
+    icon: "bg-amber-500/10 text-amber-400",
+    badge: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  },
+  critical: {
+    card: "bg-gradient-to-br from-red-500/10 to-red-500/5 border-red-500/20",
+    icon: "bg-red-500/10 text-red-400",
+    badge: "bg-red-500/10 text-red-400 border-red-500/20",
+  },
 } as const;
 
 const RULE_ICONS: Record<string, typeof TrendingUp> = {
@@ -36,7 +42,7 @@ const RULE_ICONS: Record<string, typeof TrendingUp> = {
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
-  if (isNaN(ms)) return "—";
+  if (isNaN(ms)) return "\u2014";
   if (ms < 60_000) return `${Math.floor(ms / 1000)}s ago`;
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
   return `${Math.floor(ms / 3_600_000)}h ago`;
@@ -44,9 +50,47 @@ function timeAgo(iso: string): string {
 
 function MetadataRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between py-0.5">
-      <span className="text-[10px] text-zinc-600">{label}</span>
-      <span className="text-[10px] text-zinc-300 font-medium">{value}</span>
+    <div className="flex items-center justify-between py-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs text-foreground font-medium">{value}</span>
+    </div>
+  );
+}
+
+function SalesList({ sales }: { sales: unknown }) {
+  if (!Array.isArray(sales) || sales.length === 0) return null;
+  return (
+    <div className="pt-1.5 space-y-1">
+      <span className="text-xs text-muted-foreground">Trades</span>
+      {sales.map((s: { price?: number; buyer?: string; seller?: string; time?: string }, i: number) => (
+        <div key={i} className="flex items-center gap-2 py-1 px-2 rounded-lg bg-background/30 text-[10px]">
+          <span className="text-foreground font-semibold tabular-nums w-20 shrink-0">
+            {typeof s.price === "number" ? `${s.price.toFixed(4)} ETH` : "?"}
+          </span>
+          <span className="text-muted-foreground truncate flex-1">
+            {s.seller || "?"} &rarr; {s.buyer || "?"}
+          </span>
+          {s.time && (
+            <span className="text-muted-foreground/60 shrink-0">{timeAgo(s.time)}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SellersList({ sellers }: { sellers: unknown }) {
+  if (!Array.isArray(sellers) || sellers.length === 0) return null;
+  return (
+    <div className="pt-1.5">
+      <span className="text-xs text-muted-foreground">Sellers</span>
+      <div className="flex flex-wrap gap-1 mt-1">
+        {sellers.map((s: string) => (
+          <span key={s} className="px-1.5 py-0.5 rounded-lg bg-secondary/50 text-[10px] text-foreground font-mono border border-border/30">
+            {s}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -60,54 +104,57 @@ export function AlertCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const Icon = RULE_ICONS[alert.ruleType] || TrendingUp;
-  const severityStyle = SEVERITY_STYLES[alert.severity];
-  const labelStyle = SEVERITY_LABEL[alert.severity];
+  const styles = SEVERITY_STYLES[alert.severity];
   const meta = alert.metadata || {};
 
   return (
     <div
       className={cn(
-        "border-l-2 bg-zinc-900/50 rounded-r transition-opacity",
-        severityStyle,
+        "rounded-xl border transition-all duration-300",
+        styles.card,
         alert.acknowledged && "opacity-40"
       )}
     >
-      {/* Header — clickable */}
+      {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-start gap-2 px-3 py-2.5 hover:bg-zinc-800/30 transition-colors text-left cursor-pointer"
+        className="w-full flex items-start gap-3 px-4 py-3 hover:bg-secondary/10 transition-colors text-left cursor-pointer rounded-xl"
       >
-        <Icon className={cn("w-3.5 h-3.5 mt-0.5 shrink-0", labelStyle)} />
+        <div className={cn("p-2 rounded-lg shrink-0", styles.icon)}>
+          <Icon className="w-4 h-4" />
+        </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-white truncate">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-sm font-semibold text-foreground truncate">
               {alert.title}
             </span>
-            <span className={cn("text-[9px] uppercase font-bold", labelStyle)}>
+            <span className={cn(
+              "text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border shrink-0",
+              styles.badge
+            )}>
               {alert.severity}
             </span>
           </div>
-          <p className="text-[11px] text-zinc-500 mt-0.5 leading-snug">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             {alert.description}
           </p>
-          <span className="text-[10px] text-zinc-600 mt-1 block">
+          <span className="text-[10px] text-muted-foreground/60 mt-1 block">
             {timeAgo(alert.createdAt)}
           </span>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {!alert.acknowledged && (
-            <span
-              role="button"
+            <button
               onClick={(e) => { e.stopPropagation(); onDismiss(alert.id); }}
-              className="p-0.5 hover:bg-zinc-800 rounded text-zinc-600 hover:text-zinc-400 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-secondary/30 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <X className="w-3 h-3" />
-            </span>
+              <X className="w-3.5 h-3.5" />
+            </button>
           )}
           <ChevronDown className={cn(
-            "w-3 h-3 text-zinc-600 transition-transform",
+            "w-4 h-4 text-muted-foreground transition-transform duration-200",
             expanded && "rotate-180",
           )} />
         </div>
@@ -115,14 +162,14 @@ export function AlertCard({
 
       {/* Expanded metadata */}
       {expanded && (
-        <div className="px-4 pb-2.5 pt-0 border-t border-zinc-800/50">
-          <div className="mt-1.5">
+        <div className="px-4 pb-4 pt-0">
+          <div className="rounded-lg bg-secondary/20 border border-border/30 p-3 space-y-0.5">
             {alert.ruleType === "volume_spike" && (
               <>
                 <MetadataRow label="Sales count" value={String(meta.count || "?")} />
                 <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
                 <MetadataRow label="Avg price" value={`${meta.avgPrice || "?"} ETH`} />
-                <MetadataRow label="Player" value={alert.playerName || "?"} />
+                <SalesList sales={meta.sales} />
               </>
             )}
             {alert.ruleType === "price_spike" && (
@@ -177,6 +224,7 @@ export function AlertCard({
                 <MetadataRow label="New listings" value={String(meta.count || "?")} />
                 <MetadataRow label="Window" value="30 min" />
                 <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
+                <SellersList sellers={meta.sellers} />
               </>
             )}
             {alert.ruleType === "cancellation_wave" && (
@@ -184,6 +232,7 @@ export function AlertCard({
                 <MetadataRow label="Cancellations" value={String(meta.count || "?")} />
                 <MetadataRow label="Window" value="30 min" />
                 <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
+                <SellersList sellers={meta.sellers} />
               </>
             )}
             {alert.ruleType === "lineup_lock" && (

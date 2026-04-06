@@ -25,13 +25,13 @@ interface OfferInput {
 }
 
 const WINDOW_MS = 30 * 60 * 1000;
-const COOLDOWN_MS = 20 * 60 * 1000; // 20 min cooldown per rule+player
+const COOLDOWN_MS = 30 * 60 * 1000; // 30 min cooldown per rule+player
 
 const TRADEABLE_RARITIES = new Set(["limited", "rare", "super_rare", "unique"]);
 
-// Player movement thresholds
+// Player movement thresholds (used for volume_spike + listing_surge)
 const VOLUME_THRESHOLDS: Record<string, { warning: number; critical: number }> = {
-  limited:      { warning: 4,  critical: 8 },
+  limited:      { warning: 6,  critical: 10 },
   rare:         { warning: 3,  critical: 5 },
   super_rare:   { warning: 2,  critical: 3 },
   unique:       { warning: 1,  critical: 2 },
@@ -45,10 +45,10 @@ const BUYER_THRESHOLDS: Record<string, { warning: number; critical: number }> = 
 };
 
 const CANCELLATION_THRESHOLDS: Record<string, { warning: number; critical: number }> = {
-  limited:      { warning: 3, critical: 5 },
-  rare:         { warning: 2, critical: 3 },
-  super_rare:   { warning: 1, critical: 2 },
-  unique:       { warning: 1, critical: 1 },
+  limited:      { warning: 5, critical: 8 },
+  rare:         { warning: 3, critical: 5 },
+  super_rare:   { warning: 2, critical: 3 },
+  unique:       { warning: 2, critical: 2 },
 };
 
 const LINEUP_WINDOW_MS = 60 * 60 * 1000; // 60 min window for lineup cluster
@@ -135,10 +135,10 @@ async function checkVolumeSpike(
 
   const severity: AlertSeverity = count >= thresh.critical ? "critical" : "warning";
 
-  // Get price + rarity context
+  // Get price + rarity + buyer/seller context
   const recentOffers = await prisma.marketOffer.findMany({
     where: { playerSlug: offer.playerSlug, receivedAt: { gte: windowStart } },
-    select: { priceEth: true, rarity: true },
+    select: { priceEth: true, rarity: true, buyerSlug: true, sellerSlug: true, receivedAt: true },
     orderBy: { receivedAt: "desc" },
   });
   const validPrices = recentOffers.map((p) => p.priceEth).filter((p) => p > 0);
@@ -153,10 +153,17 @@ async function checkVolumeSpike(
   }
   const rarityBreakdown = Object.entries(rarityCounts).map(([r, c]) => `${c}x ${r}`).join(", ");
 
+  const sales = recentOffers.map((o) => ({
+    price: o.priceEth,
+    buyer: o.buyerSlug,
+    seller: o.sellerSlug,
+    time: o.receivedAt.toISOString(),
+  }));
+
   return createAlertIfNotCooling("volume_spike", severity, offer, {
     title: `${offer.playerName} — ${count} sales in 30 min`,
     description: `${rarityBreakdown}. Avg price: ${avgPrice} ETH. ${offer.clubName || ""}.`,
-    metadata: { count, rarity: offer.rarity, avgPrice, rarityBreakdown },
+    metadata: { count, rarity: offer.rarity, avgPrice, rarityBreakdown, sales },
   });
 }
 
@@ -358,13 +365,21 @@ async function checkListingSurge(
 ): Promise<MarketAlert | null> {
   if (event.status !== "created") return null;
 
-  const count = await prisma.offerLifecycleEvent.count({
+  const recentListings = await prisma.offerLifecycleEvent.findMany({
     where: {
       playerSlug: event.playerSlug,
       status: "created",
       receivedAt: { gte: windowStart },
     },
+    select: { sellerSlug: true },
   });
+
+  const count = recentListings.length;
+  const sellers = [...new Set(recentListings.map((r) => r.sellerSlug).filter(Boolean))];
+
+  // Require multiple unique sellers — limited needs 3+, others need 2+
+  const minSellers = event.rarity.toLowerCase() === "limited" ? 3 : 2;
+  if (sellers.length < minSellers) return null;
 
   const thresh = getThreshold(VOLUME_THRESHOLDS, event.rarity);
   if (count < thresh.warning) return null;
@@ -372,9 +387,9 @@ async function checkListingSurge(
   const severity: AlertSeverity = count >= thresh.critical ? "critical" : "warning";
 
   return createAlertIfNotCooling("listing_surge", severity, event, {
-    title: `${event.playerName} — ${count} new listings in 30 min`,
-    description: `${event.rarity} cards being listed rapidly. Possible sell-off signal.`,
-    metadata: { count, rarity: event.rarity },
+    title: `${event.playerName} — ${count} new listings in 30 min (${sellers.length} sellers)`,
+    description: `${event.rarity} cards being listed by multiple people. Possible sell-off signal.`,
+    metadata: { count, rarity: event.rarity, sellers },
   });
 }
 
@@ -386,13 +401,21 @@ async function checkCancellationWave(
 ): Promise<MarketAlert | null> {
   if (event.status !== "cancelled") return null;
 
-  const count = await prisma.offerLifecycleEvent.count({
+  const recentCancels = await prisma.offerLifecycleEvent.findMany({
     where: {
       playerSlug: event.playerSlug,
       status: "cancelled",
       receivedAt: { gte: windowStart },
     },
+    select: { sellerSlug: true },
   });
+
+  const count = recentCancels.length;
+  const sellers = [...new Set(recentCancels.map((r) => r.sellerSlug).filter(Boolean))];
+
+  // Require multiple unique sellers — limited needs 3+, others need 2+
+  const minSellers = event.rarity.toLowerCase() === "limited" ? 3 : 2;
+  if (sellers.length < minSellers) return null;
 
   const thresh = getThreshold(CANCELLATION_THRESHOLDS, event.rarity);
   if (count < thresh.warning) return null;
@@ -400,9 +423,9 @@ async function checkCancellationWave(
   const severity: AlertSeverity = count >= thresh.critical ? "critical" : "warning";
 
   return createAlertIfNotCooling("cancellation_wave", severity, event, {
-    title: `${event.playerName} — ${count} listings cancelled in 30 min`,
-    description: `${event.rarity} listings being pulled. Could signal incoming news or re-pricing.`,
-    metadata: { count, rarity: event.rarity },
+    title: `${event.playerName} — ${count} listings cancelled in 30 min (${sellers.length} sellers)`,
+    description: `${event.rarity} listings being pulled by multiple people. Could signal incoming news.`,
+    metadata: { count, rarity: event.rarity, sellers },
   });
 }
 

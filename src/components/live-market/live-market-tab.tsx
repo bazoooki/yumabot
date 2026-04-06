@@ -4,17 +4,13 @@ import { useMemo, useEffect, useRef } from "react";
 import { Volume2, VolumeX, BarChart3 } from "lucide-react";
 import { useMarketStream } from "@/lib/market/use-market-stream";
 import { useMarketStore } from "@/lib/market/market-store";
-import type { PlayerActivity } from "@/lib/market/market-store";
 import { buildPortfolioIndex, lookupOwned } from "@/lib/market/portfolio-utils";
-import type { PortfolioIndex } from "@/lib/market/portfolio-utils";
 import { ConnectionStatus } from "./connection-status";
 import { OfferFeed } from "./offer-feed";
 import { AlertPanel } from "./alert-panel";
-import { AnalyticsPanel } from "./analytics-panel";
 import { cn } from "@/lib/utils";
 import type { SorareCard } from "@/lib/types";
 
-// Rarity-aware thresholds for portfolio alerts
 const PORTFOLIO_THRESHOLDS: Record<string, number> = {
   limited: 4,
   rare: 3,
@@ -88,7 +84,6 @@ export function LiveMarketTab({ cards }: { cards: SorareCard[] }) {
       const days = daysUntil(game.date);
       if (days < 0 || days > 3) continue;
 
-      // Determine signal type from price trend
       const prices = activity.prices;
       let signal: "accumulation" | "dump" = "accumulation";
       if (prices.length >= 3) {
@@ -101,7 +96,6 @@ export function LiveMarketTab({ cards }: { cards: SorareCard[] }) {
         }
       }
 
-      // Higher threshold for accumulation signals to reduce noise
       const threshold = signal === "dump" ? 3 : 5;
       if (activity.saleCount < threshold) continue;
 
@@ -141,33 +135,29 @@ export function LiveMarketTab({ cards }: { cards: SorareCard[] }) {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Accent line */}
+      <div className="h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+
       <ConnectionStatus />
 
       <div className="flex flex-1 overflow-hidden relative">
-        <div className={cn("overflow-hidden", advancedAnalytics ? "w-[40%]" : "w-[60%]")}>
+        <div className="w-[60%] overflow-hidden">
           <OfferFeed portfolio={portfolio} />
         </div>
 
-        {advancedAnalytics && (
-          <div className="w-[30%] overflow-hidden">
-            <AnalyticsPanel />
-          </div>
-        )}
-
-        <div className={cn("overflow-hidden", advancedAnalytics ? "w-[30%]" : "w-[40%]")}>
+        <div className="w-[40%] overflow-hidden">
           <AlertPanel />
         </div>
 
         {/* Bottom-right control buttons */}
         <div className="absolute bottom-4 right-4 flex items-center gap-2 z-10">
-          {/* Advanced Analytics toggle */}
           <button
             onClick={toggleAdvancedAnalytics}
             className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-colors text-xs font-medium",
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200",
               advancedAnalytics
-                ? "bg-purple-600/80 text-white hover:bg-purple-500"
-                : "bg-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700"
+                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                : "bg-secondary/50 text-muted-foreground border border-border/50 hover:bg-secondary hover:text-foreground"
             )}
             title={advancedAnalytics ? "Disable advanced analytics" : "Enable advanced analytics"}
           >
@@ -175,14 +165,13 @@ export function LiveMarketTab({ cards }: { cards: SorareCard[] }) {
             Advanced
           </button>
 
-          {/* Sound toggle */}
           <button
             onClick={toggleSound}
             className={cn(
-              "p-2 rounded-full transition-colors",
+              "p-2 rounded-xl transition-all duration-200",
               soundEnabled
-                ? "bg-purple-600/80 text-white hover:bg-purple-500"
-                : "bg-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700"
+                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                : "bg-secondary/50 text-muted-foreground border border-border/50 hover:bg-secondary hover:text-foreground"
             )}
             title={soundEnabled ? "Mute alerts" : "Enable alert sound"}
           >
