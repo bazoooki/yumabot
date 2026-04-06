@@ -179,7 +179,7 @@ async function checkPriceSpike(
     where: { playerSlug: offer.playerSlug, rarity: offer.rarity },
     orderBy: { receivedAt: "desc" },
     take: 12,
-    select: { priceEth: true },
+    select: { priceEth: true, buyerSlug: true, sellerSlug: true, receivedAt: true },
   });
 
   // Need 5+ prior sales to have meaningful baseline
@@ -205,10 +205,17 @@ async function checkPriceSpike(
 
   const severity: AlertSeverity = ratio > 4 ? "critical" : "warning";
 
+  const sales = recentOffers.map((o) => ({
+    price: o.priceEth,
+    buyer: o.buyerSlug,
+    seller: o.sellerSlug,
+    time: o.receivedAt.toISOString(),
+  }));
+
   return createAlertIfNotCooling("price_spike", severity, offer, {
     title: `${offer.playerName} — price ${ratio.toFixed(1)}x above median`,
     description: `${offer.rarity} card sold for ${offer.priceEth.toFixed(4)} ETH vs median ${median.toFixed(4)} ETH (${ratio.toFixed(1)}x). Buyer: ${offer.buyerSlug || "?"}.`,
-    metadata: { median, latestPrice: offer.priceEth, ratio, rarity: offer.rarity },
+    metadata: { median, latestPrice: offer.priceEth, ratio, rarity: offer.rarity, sales },
   });
 }
 
@@ -220,23 +227,32 @@ async function checkBuyerConcentration(
 ): Promise<MarketAlert | null> {
   if (!offer.buyerSlug) return null;
 
-  const count = await prisma.marketOffer.count({
+  const purchases = await prisma.marketOffer.findMany({
     where: {
       buyerSlug: offer.buyerSlug,
       playerSlug: offer.playerSlug,
       receivedAt: { gte: windowStart },
     },
+    select: { priceEth: true, buyerSlug: true, sellerSlug: true, receivedAt: true },
+    orderBy: { receivedAt: "desc" },
   });
 
+  const count = purchases.length;
   const thresh = getThreshold(BUYER_THRESHOLDS, offer.rarity);
   if (count < thresh.warning) return null;
 
   const severity: AlertSeverity = count >= thresh.critical ? "critical" : "warning";
+  const sales = purchases.map((o) => ({
+    price: o.priceEth,
+    buyer: o.buyerSlug,
+    seller: o.sellerSlug,
+    time: o.receivedAt.toISOString(),
+  }));
 
   return createAlertIfNotCooling("buyer_concentration", severity, offer, {
     title: `${offer.buyerSlug} accumulating ${offer.playerName}`,
     description: `Bought ${count}x ${offer.rarity} cards in 30 min. Latest price: ${offer.priceEth.toFixed(4)} ETH.`,
-    metadata: { buyer: offer.buyerSlug, count, rarity: offer.rarity },
+    metadata: { buyer: offer.buyerSlug, count, rarity: offer.rarity, sales },
   });
 }
 

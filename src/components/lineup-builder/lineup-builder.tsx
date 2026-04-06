@@ -5,6 +5,7 @@ import { useLineupStore } from "@/lib/lineup-store";
 import { Pitch } from "./pitch";
 import { CardPicker } from "./card-picker";
 import { GameBoard } from "./game-board";
+import { CommandBar } from "@/components/command-bar/command-bar";
 import type { SorareCard } from "@/lib/types";
 
 interface LineupBuilderProps {
@@ -36,8 +37,9 @@ export function LineupBuilder({ cards }: LineupBuilderProps) {
         )}
       </div>
 
-      {/* Right: Card Picker — takes majority space */}
-      <div className="flex-1 min-w-0 overflow-hidden">
+      {/* Right: Command Bar + Card Picker */}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <CommandBar activeTab="lineup" cards={cards} />
         <CardPicker cards={cards} />
       </div>
     </div>

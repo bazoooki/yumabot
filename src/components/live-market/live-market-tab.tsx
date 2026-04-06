@@ -8,6 +8,7 @@ import { buildPortfolioIndex, lookupOwned } from "@/lib/market/portfolio-utils";
 import { ConnectionStatus } from "./connection-status";
 import { OfferFeed } from "./offer-feed";
 import { AlertPanel } from "./alert-panel";
+import { CommandBar } from "@/components/command-bar/command-bar";
 import { cn } from "@/lib/utils";
 import type { SorareCard } from "@/lib/types";
 
@@ -137,6 +138,8 @@ export function LiveMarketTab({ cards }: { cards: SorareCard[] }) {
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Accent line */}
       <div className="h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+
+      <CommandBar activeTab="market" cards={cards} />
 
       <ConnectionStatus />
 

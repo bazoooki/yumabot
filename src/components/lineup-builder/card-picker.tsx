@@ -11,7 +11,7 @@ import { LineupCard } from "./lineup-card";
 import { GridCard } from "./grid-card";
 import { StrategyPanel } from "./strategy-panel";
 import { LiveTracker } from "./live-tracker";
-import type { SorareCard, LineupPosition, StrategyMode, ScoredCardWithStrategy } from "@/lib/types";
+import type { SorareCard, RarityType, LineupPosition, StrategyMode, ScoredCardWithStrategy } from "@/lib/types";
 import type { ScoredCard } from "@/lib/ai-lineup";
 
 type SortOption = "score" | "power" | "match" | "soon";
@@ -44,6 +44,7 @@ function getEffectiveMode(playMode: PlayMode, level: number): Exclude<PlayMode, 
 export function CardPicker({ cards }: CardPickerProps) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("score");
+  const [rarityFilter, setRarityFilter] = useState<RarityType>("common");
   const [aiBanner, setAiBanner] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState("cards");
   const [viewMode, setViewMode] = useState<"list" | "grid">("grid");
@@ -102,8 +103,24 @@ export function CardPicker({ cards }: CardPickerProps) {
     return map;
   }, [playerIntel]);
 
+  // Cards filtered by rarity (used for display + AI suggest)
+  // "common" filter = Stellar edition only (cardEditionName contains "stellar")
+  const rarityCards = useMemo(
+    () =>
+      cards.filter((c) => {
+        if (rarityFilter === "common") {
+          return (
+            c.rarityTyped === "common" &&
+            (c.cardEditionName || "").toLowerCase().includes("stellar")
+          );
+        }
+        return c.rarityTyped === rarityFilter;
+      }),
+    [cards, rarityFilter],
+  );
+
   const filteredCards = useMemo(() => {
-    let result = cards;
+    let result = rarityCards;
 
     // Filter by position when a slot is selected (EX = outfield only, no GK)
     if (positionFilter) {
@@ -162,13 +179,13 @@ export function CardPicker({ cards }: CardPickerProps) {
       default:
         return scored;
     }
-  }, [cards, search, sort, positionFilter, currentLevel, starterProbs]);
+  }, [rarityCards, search, sort, positionFilter, currentLevel, starterProbs]);
 
   // Calculate AI suggestion score
   const aiSuggestionScore = useMemo(() => {
-    const recommended = recommendLineup(cards);
+    const recommended = recommendLineup(rarityCards);
     return Math.round(estimateTotalScore(recommended));
-  }, [cards]);
+  }, [rarityCards]);
 
   const emptySlots = slots.filter((s) => !s.card).length;
 
@@ -254,6 +271,35 @@ export function CardPicker({ cards }: CardPickerProps) {
             )}
           </div>
 
+          {/* Rarity filter */}
+          <div className="flex items-center gap-1.5">
+            {(
+              [
+                { value: "common", label: "Stellar", color: "text-yellow-400", bg: "bg-yellow-500/15 border-yellow-500/30", enabled: true },
+                { value: "limited", label: "Limited", color: "text-amber-500", bg: "bg-amber-500/15 border-amber-500/30", enabled: false },
+                { value: "rare", label: "Rare", color: "text-red-400", bg: "bg-red-500/15 border-red-500/30", enabled: false },
+                { value: "super_rare", label: "Super Rare", color: "text-blue-400", bg: "bg-blue-500/15 border-blue-500/30", enabled: false },
+                { value: "unique", label: "Unique", color: "text-purple-400", bg: "bg-purple-500/15 border-purple-500/30", enabled: false },
+              ] as const
+            ).map((r) => (
+              <button
+                key={r.value}
+                onClick={() => r.enabled && setRarityFilter(r.value)}
+                disabled={!r.enabled}
+                className={cn(
+                  "px-2.5 py-1 rounded text-[10px] font-bold border transition-colors",
+                  !r.enabled
+                    ? "border-zinc-800 text-zinc-700 cursor-not-allowed"
+                    : rarityFilter === r.value
+                      ? `${r.bg} ${r.color}`
+                      : "border-zinc-700 text-zinc-500 hover:text-zinc-300",
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
           {/* Sort + AI */}
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -271,7 +317,7 @@ export function CardPicker({ cards }: CardPickerProps) {
             </div>
 
             <button
-              onClick={() => handleAutoFill(cards)}
+              onClick={() => handleAutoFill(rarityCards)}
               disabled={emptySlots === 0 || isAutoFilling}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all shrink-0",

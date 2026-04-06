@@ -178,6 +178,7 @@ export function AlertCard({
                 <MetadataRow label="Median price" value={`${typeof meta.median === 'number' ? meta.median.toFixed(4) : "?"} ETH`} />
                 <MetadataRow label="Spike ratio" value={`${typeof meta.ratio === 'number' ? meta.ratio.toFixed(1) : "?"}x`} />
                 <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
+                <SalesList sales={meta.sales} />
               </>
             )}
             {alert.ruleType === "buyer_concentration" && (
@@ -185,6 +186,7 @@ export function AlertCard({
                 <MetadataRow label="Buyer" value={String(meta.buyer || "?")} />
                 <MetadataRow label="Cards bought" value={String(meta.count || "?")} />
                 <MetadataRow label="Rarity" value={String(meta.rarity || "?")} />
+                <SalesList sales={meta.sales} />
               </>
             )}
             {alert.ruleType === "velocity" && (
