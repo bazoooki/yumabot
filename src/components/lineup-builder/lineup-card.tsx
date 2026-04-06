@@ -4,17 +4,11 @@ import { memo, useState } from "react";
 import Image from "next/image";
 import { Info } from "lucide-react";
 import { cn, getKickoffUrgency, formatKickoffTime, formatKickoffDate } from "@/lib/utils";
-import { POSITION_SHORT, type SorareCard, type CardStrategyMetrics, type StrategyTag, type PlayerIntel } from "@/lib/types";
+import { type SorareCard, type CardStrategyMetrics, type StrategyTag, type PlayerIntel } from "@/lib/types";
+import { STRATEGY_TAG_STYLES, POSITION_SHORT } from "@/lib/ui-config";
 import type { PlayerForm } from "@/lib/hooks";
 import { getEditionInfo } from "@/lib/ai-lineup";
 import { PlayerModal } from "./player-modal";
-
-const STRATEGY_TAG_STYLE: Record<StrategyTag, { color: string; bg: string }> = {
-  SAFE: { color: "text-green-400", bg: "bg-green-500/20" },
-  BALANCED: { color: "text-blue-400", bg: "bg-blue-500/20" },
-  CEILING: { color: "text-amber-400", bg: "bg-amber-500/20" },
-  RISKY: { color: "text-red-400", bg: "bg-red-500/20" },
-};
 
 interface LineupCardProps {
   card: SorareCard;
@@ -198,8 +192,8 @@ export const LineupCard = memo(function LineupCard({
             <span
               className={cn(
                 "text-[10px] font-bold px-1.5 py-0.5 rounded ml-auto",
-                STRATEGY_TAG_STYLE[strategy.strategyTag].bg,
-                STRATEGY_TAG_STYLE[strategy.strategyTag].color,
+                STRATEGY_TAG_STYLES[strategy.strategyTag].bg,
+                STRATEGY_TAG_STYLES[strategy.strategyTag].text,
               )}
               title={strategy.strategyReason}
             >

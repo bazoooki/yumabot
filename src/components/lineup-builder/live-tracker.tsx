@@ -5,7 +5,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useLineupStore, STREAK_LEVELS } from "@/lib/lineup-store";
 import { useLiveScores } from "@/lib/hooks";
-import { POSITION_SHORT } from "@/lib/types";
+import { POSITION_SHORT } from "@/lib/ui-config";
 import { Clock, CheckCircle2, Radio, Crown, Trophy, XCircle } from "lucide-react";
 
 export function LiveTracker() {

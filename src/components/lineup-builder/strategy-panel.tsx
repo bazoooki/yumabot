@@ -14,14 +14,8 @@ import {
 } from "@/lib/ai-lineup";
 import { usePlayerIntel } from "@/lib/hooks";
 import type { SorareCard, Position, StrategyTag, ScoredCardWithStrategy } from "@/lib/types";
+import { STRATEGY_TAG_STYLES } from "@/lib/ui-config";
 import { Sparkles, Clock, Shield, AlertTriangle, Crown, Zap, Crosshair, SlidersHorizontal, TrendingUp, ChevronDown, ChevronRight, Users, Target, CheckCircle2 } from "lucide-react";
-
-const TAG_COLORS: Record<StrategyTag, string> = {
-  SAFE: "text-green-400 bg-green-500/15",
-  BALANCED: "text-blue-400 bg-blue-500/15",
-  CEILING: "text-amber-400 bg-amber-500/15",
-  RISKY: "text-red-400 bg-red-500/15",
-};
 
 interface StrategyPanelProps {
   cards: SorareCard[];
@@ -465,7 +459,7 @@ export function StrategyPanel({ cards }: StrategyPanelProps) {
                                 </span>
                                 <span className={cn(
                                   "text-[9px] font-bold px-1 py-0.5 rounded",
-                                  TAG_COLORS[sc.strategy.strategyTag]
+                                  `${STRATEGY_TAG_STYLES[sc.strategy.strategyTag].text} ${STRATEGY_TAG_STYLES[sc.strategy.strategyTag].bg}`
                                 )}>
                                   {sc.strategy.strategyTag}
                                 </span>

@@ -1,22 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
 import Image from "next/image";
 import {
   Trophy, TrendingUp, Clock, Shield, Zap, Crown,
   AlertTriangle, Target, ChevronRight, Flame,
 } from "lucide-react";
-import { cn, groupByKickoffWindow, getMergeWindowForLevel, formatKickoffTime, formatKickoffDate, getKickoffUrgency } from "@/lib/utils";
-import { useLineupStore, STREAK_LEVELS } from "@/lib/lineup-store";
-import {
-  scoreCardsWithStrategy,
-  evaluateTimeBatch,
-  evaluate4PlayerViability,
-  getStrategyMode,
-  getStrategyRecommendation,
-  getEditionInfo,
-} from "@/lib/ai-lineup";
-import type { SorareCard, Position, StrategyTag, ScoredCardWithStrategy } from "@/lib/types";
+import { cn, formatKickoffTime, formatKickoffDate, getKickoffUrgency } from "@/lib/utils";
+import { STREAK_LEVELS } from "@/lib/lineup-store";
+import { getEditionInfo, getStrategyRecommendation } from "@/lib/ai-lineup";
+import type { SorareCard, StrategyTag } from "@/lib/types";
+import { STRATEGY_TAG_STYLES } from "@/lib/ui-config";
+import { useStrategyDashboard } from "@/lib/hooks/use-strategy-dashboard";
 
 interface StrategyDashboardProps {
   cards: SorareCard[];
@@ -43,109 +37,22 @@ function SectionHeader({ icon: Icon, title, subtitle, color = "text-purple-400" 
   );
 }
 
-const STRATEGY_TAG_COLORS: Record<StrategyTag, { text: string; bg: string; border: string }> = {
-  SAFE: { text: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/20" },
-  BALANCED: { text: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
-  CEILING: { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
-  RISKY: { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
-};
-
 // --- Main Component ---
 
 export function StrategyDashboard({ cards }: StrategyDashboardProps) {
-  const { currentLevel, mergeWindow, setMergeWindow } = useLineupStore();
-  const mode = getStrategyMode(currentLevel);
-  const effectiveMergeWindow = mergeWindow ?? getMergeWindowForLevel(currentLevel);
-
-  // Score all cards at current level
-  const scoredCards = useMemo(() => scoreCardsWithStrategy(cards, currentLevel), [cards, currentLevel]);
-
-  // Top 15 players
-  const topPlayers = useMemo(() => {
-    const seen = new Set<string>();
-    const unique: ScoredCardWithStrategy[] = [];
-    for (const sc of scoredCards) {
-      const slug = sc.card.anyPlayer?.slug;
-      if (!slug || seen.has(slug)) continue;
-      if (!sc.hasGame) continue;
-      seen.add(slug);
-      unique.push(sc);
-      if (unique.length >= 15) break;
-    }
-    return unique;
-  }, [scoredCards]);
-
-  // Game time batches
-  const timeBatches = useMemo(() => {
-    const wrapped = scoredCards.filter((sc) => sc.hasGame);
-    const groups = groupByKickoffWindow(wrapped, effectiveMergeWindow);
-    return groups.map((g) => {
-      const batchCards = g.items.map((i) => i.card);
-      const { expectedTotal } = evaluateTimeBatch(batchCards, currentLevel);
-      return { ...g, expectedTotal, playerCount: batchCards.length };
-    });
-  }, [scoredCards, currentLevel, effectiveMergeWindow]);
-
-  // Level-by-level playbook
-  const playbook = useMemo(() => {
-    return STREAK_LEVELS.map((lvl) => {
-      const scored = scoreCardsWithStrategy(cards, lvl.level);
-      const topForLevel = scored.filter((s) => s.hasGame).slice(0, 5);
-      const totalExpected = topForLevel.reduce((s, c) => s + c.strategy.expectedScore, 0);
-      // Captain bonus on top scorer
-      const captainBonus = topForLevel.length > 0
-        ? Math.max(...topForLevel.map((c) => c.strategy.expectedScore)) * 0.5
-        : 0;
-      const withCaptain = totalExpected + captainBonus;
-      const meetsThreshold = withCaptain >= lvl.threshold;
-      return {
-        ...lvl,
-        topCards: topForLevel,
-        expectedTotal: Math.round(withCaptain),
-        meetsThreshold,
-        mode: getStrategyMode(lvl.level),
-        recommendation: getStrategyRecommendation(lvl.level),
-      };
-    });
-  }, [cards]);
-
-  // 4-player viability
-  const viability = useMemo(() => {
-    if (currentLevel > 3) return null;
-    const positions: Position[] = ["Goalkeeper", "Defender", "Midfielder", "Forward"];
-    const checks = positions.map((pos) => ({
-      skipPosition: pos,
-      ...evaluate4PlayerViability(cards, currentLevel, pos),
-    }));
-    const bestOption = checks.reduce((a, b) => a.expectedTotal > b.expectedTotal ? a : b);
-    return { checks, bestOption };
-  }, [cards, currentLevel]);
-
-  // EV analysis
-  const evAnalysis = useMemo(() => {
-    const cumulativeEarned = STREAK_LEVELS
-      .filter((l) => l.level < currentLevel)
-      .reduce((s, l) => s + parseFloat(l.reward.replace(/[$,]/g, "")), 0);
-    const currentReward = parseFloat(STREAK_LEVELS[currentLevel - 1].reward.replace(/[$,]/g, ""));
-    const remainingRewards = STREAK_LEVELS
-      .filter((l) => l.level >= currentLevel)
-      .reduce((s, l) => s + parseFloat(l.reward.replace(/[$,]/g, "")), 0);
-
-    return { cumulativeEarned, currentReward, remainingRewards };
-  }, [currentLevel]);
-
-  // Stats summary
-  const stats = useMemo(() => {
-    const withGame = scoredCards.filter((sc) => sc.hasGame);
-    const avgScore = withGame.length > 0
-      ? withGame.reduce((s, c) => s + (c.card.anyPlayer?.averageScore || 0), 0) / withGame.length
-      : 0;
-    const tagCounts = { SAFE: 0, BALANCED: 0, CEILING: 0, RISKY: 0 };
-    for (const sc of withGame.slice(0, 50)) {
-      tagCounts[sc.strategy.strategyTag]++;
-    }
-    return { totalWithGame: withGame.length, avgScore, tagCounts };
-  }, [scoredCards]);
+  const {
+    currentLevel,
+    mode,
+    effectiveMergeWindow,
+    mergeWindow,
+    setMergeWindow,
+    topPlayers,
+    timeBatches,
+    playbook,
+    viability,
+    evAnalysis,
+    stats,
+  } = useStrategyDashboard(cards);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -342,9 +249,9 @@ export function StrategyDashboard({ cards }: StrategyDashboardProps) {
                   {(Object.entries(stats.tagCounts) as [StrategyTag, number][]).map(([tag, count]) => (
                     <div key={tag} className={cn(
                       "flex items-center justify-between px-3 py-2 rounded-lg border",
-                      STRATEGY_TAG_COLORS[tag].bg, STRATEGY_TAG_COLORS[tag].border
+                      STRATEGY_TAG_STYLES[tag].bg, STRATEGY_TAG_STYLES[tag].border
                     )}>
-                      <span className={cn("text-[11px] font-bold", STRATEGY_TAG_COLORS[tag].text)}>{tag}</span>
+                      <span className={cn("text-[11px] font-bold", STRATEGY_TAG_STYLES[tag].text)}>{tag}</span>
                       <span className="text-xs font-bold text-zinc-300">{count}</span>
                     </div>
                   ))}
@@ -367,7 +274,7 @@ export function StrategyDashboard({ cards }: StrategyDashboardProps) {
               const nextGame = player.activeClub?.upcomingGames?.[0];
               const maxScore = Math.max(...topPlayers.map((p) => p.strategy.expectedScore));
               const barWidth = maxScore > 0 ? (sc.strategy.expectedScore / maxScore) * 100 : 0;
-              const tagColors = STRATEGY_TAG_COLORS[sc.strategy.strategyTag];
+              const tagColors = STRATEGY_TAG_STYLES[sc.strategy.strategyTag];
 
               return (
                 <div

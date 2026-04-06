@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { ArrowLeft, Copy, Check, Users, Trophy, Clock, Timer, Zap, Target, TrendingUp, Crown } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { CommentaryFeed } from "./commentary-feed";
 import { RoomLineupBuilder } from "./room-lineup-builder";
 import { Reactions } from "./reactions";
-import type { Room, Participant, RoomLineup, RoomScore, PlayerScoreData } from "@/lib/rooms/types";
+import type { PlayerScoreData } from "@/lib/rooms/types";
 import { STREAK_REWARDS } from "@/lib/rooms/types";
 import type { SorareCard, FixtureGame } from "@/lib/types";
+import { useRoomData } from "@/lib/hooks/use-room-data";
+import { useCountdown } from "@/lib/hooks/use-countdown";
 
 interface RoomViewProps {
   roomId: string;
@@ -18,74 +19,15 @@ interface RoomViewProps {
   onBack: () => void;
 }
 
-interface RoomData {
-  room: Room & { games?: FixtureGame[] };
-  participants: Participant[];
-  lineups: RoomLineup[];
-  scores: RoomScore[];
-}
-
-function useCountdown(targetDate: string | null) {
-  const [timeLeft, setTimeLeft] = useState("");
-
-  useEffect(() => {
-    if (!targetDate) return;
-    const update = () => {
-      const ms = new Date(targetDate).getTime() - Date.now();
-      if (ms <= 0) { setTimeLeft("LIVE"); return; }
-      const h = Math.floor(ms / 3600000);
-      const m = Math.floor((ms % 3600000) / 60000);
-      const s = Math.floor((ms % 60000) / 1000);
-      setTimeLeft(h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`);
-    };
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [targetDate]);
-
-  return timeLeft;
-}
-
 export function RoomView({ roomId, userSlug, cards, onBack }: RoomViewProps) {
-  const [data, setData] = useState<RoomData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, loading, polling, refetch: fetchRoom } = useRoomData(roomId);
   const [copied, setCopied] = useState(false);
-  const [polling, setPolling] = useState(false);
-
-  const fetchRoom = useCallback(async () => {
-    const res = await fetch(`/api/rooms/${roomId}`);
-    const d = await res.json();
-    setData(d);
-    setLoading(false);
-  }, [roomId]);
-
-  useEffect(() => { fetchRoom(); }, [fetchRoom]);
 
   const games = ((data?.room as { games?: FixtureGame[] })?.games || []) as FixtureGame[];
   const earliestKickoff = games.length > 0
     ? games.reduce((earliest, g) => g.date < earliest ? g.date : earliest, games[0].date)
     : null;
   const countdown = useCountdown(earliestKickoff);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel(`room-${roomId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "room_scores", filter: `room_id=eq.${roomId}` }, () => fetchRoom())
-      .on("postgres_changes", { event: "*", schema: "public", table: "participants", filter: `room_id=eq.${roomId}` }, () => fetchRoom())
-      .on("postgres_changes", { event: "*", schema: "public", table: "room_lineups", filter: `room_id=eq.${roomId}` }, () => fetchRoom())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [roomId, fetchRoom]);
-
-  useEffect(() => {
-    if (!data?.room) return;
-    const interval = setInterval(async () => {
-      setPolling(true);
-      try { await fetch(`/api/rooms/${roomId}/scores`); } catch {}
-      setPolling(false);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [roomId, data?.room]);
 
   async function copyInviteCode() {
     if (!data?.room) return;

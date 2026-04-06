@@ -6,7 +6,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { POSITION_SHORT } from "@/lib/types";
+import { POSITION_SHORT } from "@/lib/ui-config";
 import type { SorareCard, PlayerGameScore } from "@/lib/types";
 import { getEditionInfo } from "@/lib/ai-lineup";
 import { generateAnalysis } from "@/lib/ai-analysis";

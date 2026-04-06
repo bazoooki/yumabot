@@ -1,6 +1,6 @@
 import type { SorareCard } from "@/lib/types";
 import { createMarketTools } from "./tools/market-tools";
-import { createLineupTools } from "./tools/lineup-tools";
+import { createLineupTools } from "./tools/lineup";
 import { createGlobalTools } from "./tools/global-tools";
 
 export interface ToolDefinition {

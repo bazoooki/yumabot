@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { SorareCard, LineupSlot, LineupPosition, ScoredCardWithStrategy, LineupProbability } from "./types";
 import { recommendLineup, recommendLineupWithStrategy } from "./ai-lineup";
+import { positionMatchesSlot } from "./normalization";
 
 export type PlayMode = "fast" | "balanced" | "safe" | "auto";
 
@@ -43,21 +44,6 @@ interface LineupStore {
   setCaptain: (slotIndex: number | null) => void;
   setPlayMode: (mode: PlayMode) => void;
   setMergeWindow: (minutes: number | null) => void;
-}
-
-function positionMatchesSlot(
-  playerPosition: string | undefined,
-  slotPosition: LineupPosition
-): boolean {
-  // EX slot accepts any outfield player (no goalkeepers)
-  if (slotPosition === "EX") return playerPosition !== "Goalkeeper";
-  const map: Record<string, LineupPosition> = {
-    Goalkeeper: "GK",
-    Defender: "DEF",
-    Midfielder: "MID",
-    Forward: "FWD",
-  };
-  return map[playerPosition || ""] === slotPosition;
 }
 
 export const useLineupStore = create<LineupStore>((set, get) => ({

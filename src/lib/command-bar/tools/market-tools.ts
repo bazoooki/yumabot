@@ -1,29 +1,7 @@
 import type { ToolHandler } from "../tool-registry";
 import { useMarketStore } from "@/lib/market/market-store";
 import type { MarketFilters, MarketSort, TradeType } from "@/lib/market/types";
-import type { RarityType, Position } from "@/lib/types";
-
-const RARITY_ALIASES: Record<string, RarityType> = {
-  limited: "limited",
-  rare: "rare",
-  super_rare: "super_rare",
-  "super rare": "super_rare",
-  superrare: "super_rare",
-  unique: "unique",
-};
-
-const POSITION_ALIASES: Record<string, Position> = {
-  gk: "Goalkeeper",
-  goalkeeper: "Goalkeeper",
-  def: "Defender",
-  defender: "Defender",
-  mid: "Midfielder",
-  midfielder: "Midfielder",
-  fwd: "Forward",
-  forward: "Forward",
-  st: "Forward",
-  striker: "Forward",
-};
+import { normalizeRarity, normalizePosition } from "@/lib/normalization";
 
 const SORT_ALIASES: Record<string, MarketSort> = {
   recent: "recent",
@@ -49,14 +27,6 @@ const TRADE_ALIASES: Record<string, TradeType> = {
   swaps: "swap",
   mixed: "mixed",
 };
-
-function normalizeRarity(input: string): RarityType | null {
-  return RARITY_ALIASES[input.toLowerCase().trim()] ?? null;
-}
-
-function normalizePosition(input: string): Position | null {
-  return POSITION_ALIASES[input.toLowerCase().trim()] ?? null;
-}
 
 function normalizeSort(input: string): MarketSort | null {
   return SORT_ALIASES[input.toLowerCase().trim()] ?? null;

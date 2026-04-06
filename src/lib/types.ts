@@ -141,13 +141,6 @@ export const RARITY_CONFIG: Record<
   custom_series: { label: "Custom", color: "text-pink-400", dotColor: "bg-pink-400" },
 };
 
-export const POSITION_SHORT: Record<string, string> = {
-  Goalkeeper: "GK",
-  Defender: "DF",
-  Midfielder: "MD",
-  Forward: "FW",
-};
-
 // --- Strategy types ---
 
 export type StrategyTag = "SAFE" | "BALANCED" | "CEILING" | "RISKY";

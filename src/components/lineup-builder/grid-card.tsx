@@ -4,16 +4,10 @@ import { memo } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { formatKickoffTime, getKickoffUrgency } from "@/lib/utils";
-import { POSITION_SHORT, type SorareCard, type CardStrategyMetrics, type StrategyTag, type PlayerIntel } from "@/lib/types";
+import { type SorareCard, type CardStrategyMetrics, type StrategyTag, type PlayerIntel } from "@/lib/types";
+import { STRATEGY_TAG_STYLES, POSITION_SHORT } from "@/lib/ui-config";
 import type { PlayerForm } from "@/lib/hooks";
 import { getEditionInfo } from "@/lib/ai-lineup";
-
-const TAG_BG: Record<StrategyTag, string> = {
-  SAFE: "bg-green-500/80",
-  BALANCED: "bg-blue-500/80",
-  CEILING: "bg-amber-500/80",
-  RISKY: "bg-red-500/80",
-};
 
 interface GridCardProps {
   card: SorareCard;
@@ -105,7 +99,7 @@ export const GridCard = memo(function GridCard({
         {strategy && (
           <div className={cn(
             "absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-bold text-white shadow-lg",
-            TAG_BG[strategy.strategyTag]
+            STRATEGY_TAG_STYLES[strategy.strategyTag].bgSolid
           )}>
             {strategy.strategyTag}
           </div>

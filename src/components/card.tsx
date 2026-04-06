@@ -3,7 +3,8 @@
 import { memo, useState, useCallback } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { POSITION_SHORT, type SorareCard } from "@/lib/types";
+import { type SorareCard } from "@/lib/types";
+import { POSITION_SHORT } from "@/lib/ui-config";
 import { getEditionInfo } from "@/lib/ai-lineup";
 
 interface CardComponentProps {

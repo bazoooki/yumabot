@@ -14,16 +14,9 @@ import { LiveTracker } from "./live-tracker";
 import { CommandBar } from "@/components/command-bar/command-bar";
 import type { SorareCard, RarityType, LineupPosition, ScoredCardWithStrategy } from "@/lib/types";
 import type { ScoredCard } from "@/lib/ai-lineup";
+import { SLOT_TO_POSITION } from "@/lib/normalization";
 
 type SortOption = "score" | "power" | "match" | "soon";
-
-const SLOT_TO_POSITION: Record<LineupPosition, string | null> = {
-  GK: "Goalkeeper",
-  DEF: "Defender",
-  MID: "Midfielder",
-  FWD: "Forward",
-  EX: null, // accepts any position
-};
 
 interface CardPickerProps {
   cards: SorareCard[];

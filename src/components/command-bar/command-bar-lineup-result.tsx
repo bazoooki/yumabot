@@ -2,6 +2,7 @@
 
 import { Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { STRATEGY_TAG_STYLES, POSITION_COLORS, POSITION_SHORT } from "@/lib/ui-config";
 
 interface PlayerData {
   name: string;
@@ -39,27 +40,6 @@ interface LineupRecommendation {
   players: PlayerData[];
   runnersUp: RunnerUp[];
 }
-
-const POSITION_COLORS: Record<string, string> = {
-  Goalkeeper: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  Defender: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  Midfielder: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  Forward: "bg-red-500/20 text-red-400 border-red-500/30",
-};
-
-const POSITION_SHORT: Record<string, string> = {
-  Goalkeeper: "GK",
-  Defender: "DEF",
-  Midfielder: "MID",
-  Forward: "FWD",
-};
-
-const TAG_COLORS: Record<string, string> = {
-  SAFE: "bg-green-500/20 text-green-400",
-  BALANCED: "bg-blue-500/20 text-blue-400",
-  CEILING: "bg-amber-500/20 text-amber-400",
-  RISKY: "bg-red-500/20 text-red-400",
-};
 
 function formatGameTime(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -161,7 +141,9 @@ export function CommandBarLineupResult({ data }: Props) {
                 <span
                   className={cn(
                     "text-[9px] font-bold px-1.5 py-0.5 rounded",
-                    TAG_COLORS[p.strategyTag] ?? "bg-zinc-700 text-zinc-400",
+                    p.strategyTag in STRATEGY_TAG_STYLES
+                      ? `${STRATEGY_TAG_STYLES[p.strategyTag as keyof typeof STRATEGY_TAG_STYLES].bg} ${STRATEGY_TAG_STYLES[p.strategyTag as keyof typeof STRATEGY_TAG_STYLES].text}`
+                      : "bg-zinc-700 text-zinc-400",
                   )}
                 >
                   {p.strategyTag}

@@ -5,8 +5,10 @@ import Image from "next/image";
 import { Lock, Crown, X, Sparkles, Users, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLineupStore } from "@/lib/lineup-store";
-import { RARITY_CONFIG, POSITION_SHORT } from "@/lib/types";
+import { RARITY_CONFIG } from "@/lib/types";
+import { POSITION_SHORT } from "@/lib/ui-config";
 import type { SorareCard, Position } from "@/lib/types";
+import { SLOT_TO_POSITION } from "@/lib/normalization";
 import type { FixtureGame } from "@/lib/types";
 
 interface RoomLineupBuilderProps {
@@ -52,14 +54,8 @@ export function RoomLineupBuilder({ cards, games, roomId, userSlug, onSubmitted 
     if (selectedSlotIndex == null) return "all";
     const slotPos = slots[selectedSlotIndex]?.position;
     if (!slotPos) return "all";
-    const map: Record<string, Position | "all"> = {
-      GK: "Goalkeeper",
-      DEF: "Defender",
-      MID: "Midfielder",
-      FWD: "Forward",
-      EX: "all", // EX accepts any outfield — we filter out GK below
-    };
-    return map[slotPos] || "all";
+    const mapped = SLOT_TO_POSITION[slotPos];
+    return (mapped as Position) || "all";
   }, [selectedSlotIndex, slots]);
 
   const available = useMemo(() => {
