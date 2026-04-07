@@ -563,6 +563,173 @@ export function getStrategyRecommendation(level: number): string {
   return `Level ${level} (${level === 4 ? 400 : level === 5 ? 440 : 480} pts) — SAFE mode. High stakes ($${level === 4 ? "50" : level === 5 ? "200" : "1,000"} reward). Use your absolute best 5 players. Wait for confirmed lineups. Captain your highest-ceiling player.`;
 }
 
+// --- In-Season Scoring ---
+
+/** Map dynamic threshold score to level 1-6 for weight selection */
+export function mapThresholdToLevel(thresholdScore: number): number {
+  if (thresholdScore <= 340) return 1;
+  if (thresholdScore <= 360) return 2;
+  if (thresholdScore <= 380) return 3;
+  if (thresholdScore <= 400) return 4;
+  if (thresholdScore <= 440) return 5;
+  return 6;
+}
+
+/** Score cards filtered for in-season competition rules */
+export function scoreCardsForInSeason(
+  cards: SorareCard[],
+  requirements: {
+    allowedRarities: string[];
+    leagueRestriction: string | null;
+  },
+  targetScore: number,
+  starterProbs?: Record<string, number | null> | null,
+  playerIntelMap?: Record<string, PlayerIntel> | null,
+): ScoredCardWithStrategy[] {
+  // Filter by rarity
+  let eligible = cards.filter((c) =>
+    requirements.allowedRarities.includes(c.rarityTyped),
+  );
+
+  // Filter by league (skip for cross-league)
+  if (requirements.leagueRestriction) {
+    eligible = eligible.filter(
+      (c) =>
+        c.anyPlayer?.activeClub?.domesticLeague?.name ===
+        requirements.leagueRestriction,
+    );
+  }
+
+  const level = mapThresholdToLevel(targetScore);
+  return scoreCardsWithStrategy(eligible, level, starterProbs, playerIntelMap);
+}
+
+/** Recommend best 5 for in-season with validation */
+export async function recommendInSeasonLineup(
+  cards: SorareCard[],
+  requirements: {
+    allowedRarities: string[];
+    leagueRestriction: string | null;
+    minInSeasonCards: number;
+  },
+  targetScore: number,
+  playerIntelMap?: Record<string, PlayerIntel> | null,
+  usedCardSlugs?: Set<string>,
+): Promise<{ lineup: ScoredCardWithStrategy[]; warnings: string[]; probability: LineupProbability }> {
+  const starterProbs: Record<string, number | null> | undefined = playerIntelMap
+    ? Object.fromEntries(
+        Object.entries(playerIntelMap).map(([slug, intel]) => [
+          slug,
+          intel.starterProbability,
+        ]),
+      )
+    : undefined;
+
+  const scored = scoreCardsForInSeason(
+    cards,
+    requirements,
+    targetScore,
+    starterProbs,
+    playerIntelMap,
+  );
+
+  // Exclude cards used in other teams
+  const available = usedCardSlugs
+    ? scored.filter((sc) => !usedCardSlugs.has(sc.card.slug))
+    : scored;
+
+  // Take top candidates for tier 2 enrichment
+  const candidates = available.slice(0, 15);
+
+  // Tier 2: fetch real score history
+  const enriched = await Promise.allSettled(
+    candidates.map(async (sc) => {
+      const player = sc.card.anyPlayer;
+      if (!player) return sc;
+
+      const position = player.cardPositions?.[0] || "Goalkeeper";
+      const res = await fetch(
+        `/api/player-scores?slug=${encodeURIComponent(player.slug)}&position=${encodeURIComponent(position)}`,
+      );
+      if (!res.ok) return sc;
+      const data = await res.json();
+      const scores: PlayerGameScore[] = data.scores ?? [];
+
+      if (scores.length < 3) return sc;
+
+      const scoreValues = scores.filter((s) => s.score > 0).map((s) => s.score);
+      const intelProb = playerIntelMap?.[player.slug]?.starterProbability;
+      const startProb = intelProb != null ? intelProb / 100 : 0.75;
+
+      const strategy = computeStrategyMetrics(sc.card, scoreValues, startProb);
+      const level = mapThresholdToLevel(targetScore);
+      const strategyScore = computeStrategyScore(strategy, level);
+      return { ...sc, strategy, strategyScore };
+    }),
+  );
+
+  const enrichedCards = enriched.map((result, i) =>
+    result.status === "fulfilled" ? result.value : candidates[i],
+  );
+
+  enrichedCards.sort((a, b) => b.strategyScore - a.strategyScore);
+
+  // Select with positional diversity
+  const selected: ScoredCardWithStrategy[] = [];
+  const usedPlayerSlugs = new Set<string>();
+  const warnings: string[] = [];
+
+  const positionMap: Record<string, ScoredCardWithStrategy[]> = {
+    Goalkeeper: [],
+    Defender: [],
+    Midfielder: [],
+    Forward: [],
+  };
+
+  for (const sc of enrichedCards) {
+    const pos = sc.card.anyPlayer?.cardPositions?.[0];
+    if (pos && positionMap[pos]) {
+      positionMap[pos].push(sc);
+    }
+  }
+
+  for (const pos of ["Goalkeeper", "Defender", "Midfielder", "Forward"]) {
+    const playerSlug = (sc: ScoredCardWithStrategy) =>
+      sc.card.anyPlayer?.slug ?? sc.card.slug;
+    const best = positionMap[pos].find(
+      (sc) => !usedPlayerSlugs.has(playerSlug(sc)),
+    );
+    if (best && selected.length < 5) {
+      selected.push(best);
+      usedPlayerSlugs.add(playerSlug(best));
+    }
+  }
+
+  for (const sc of enrichedCards) {
+    if (selected.length >= 5) break;
+    const playerSlug = sc.card.anyPlayer?.slug ?? sc.card.slug;
+    if (!usedPlayerSlugs.has(playerSlug)) {
+      selected.push(sc);
+      usedPlayerSlugs.add(playerSlug);
+    }
+  }
+
+  // Validate min in-season cards
+  const inSeasonCount = selected.filter(
+    (sc) => sc.card.inSeasonEligible,
+  ).length;
+  if (inSeasonCount < requirements.minInSeasonCards) {
+    warnings.push(
+      `Only ${inSeasonCount}/${requirements.minInSeasonCards} in-season eligible cards available`,
+    );
+  }
+
+  const level = mapThresholdToLevel(targetScore);
+  const probability = estimateLineupProbability(selected, level);
+
+  return { lineup: selected, warnings, probability };
+}
+
 // Approximation of standard normal CDF
 function normalCDF(z: number): number {
   if (z > 6) return 1;

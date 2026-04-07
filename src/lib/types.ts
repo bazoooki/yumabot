@@ -256,3 +256,66 @@ export interface LineupProbability {
   successProbability: number;
   confidenceLevel: "high" | "medium" | "low";
 }
+
+// --- In-Season types ---
+
+export interface InSeasonCompetition {
+  slug: string;
+  displayName: string;
+  leagueName: string;
+  leagueSlug: string;
+  seasonality: string;
+  mainRarityType: RarityType;
+  division: number;
+  teamsCap: number;
+  cutOffDate: string;
+  canCompose: boolean;
+  iconUrl: string;
+  stadiumUrl: string | null;
+  teams: InSeasonTeam[];
+  streak: InSeasonStreak | null;
+  eligibleCardCount: number;
+}
+
+export interface InSeasonTeam {
+  name: string;
+  lineupSlug: string | null;
+  slots: InSeasonSlot[];
+  totalScore: number | null;
+  rewardMultiplier: number;
+  canEdit: boolean;
+  ranking: number | null;
+}
+
+export interface InSeasonSlot {
+  index: number;
+  position: string;
+  cardSlug: string | null;
+  playerName: string | null;
+  playerSlug: string | null;
+  pictureUrl: string | null;
+  rarityTyped: RarityType | null;
+  isCaptain: boolean;
+  score: number | null;
+  scoreStatus: string | null;
+}
+
+export interface InSeasonStreak {
+  currentLevel: number;
+  streakCount: number;
+  thresholds: InSeasonThreshold[];
+}
+
+export interface InSeasonThreshold {
+  level: number;
+  score: number;
+  reward: string;
+  isCleared: boolean;
+  isCurrent: boolean;
+}
+
+export interface InSeasonLineupSlot {
+  position: LineupPosition;
+  card: SorareCard | null;
+  isCaptain: boolean;
+}

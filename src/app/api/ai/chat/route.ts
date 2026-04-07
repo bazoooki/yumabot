@@ -60,6 +60,14 @@ When the user mentions game timing, use gameBatch: 'today', 'tomorrow', 'weekend
 When the user says "exclude X" or "without X", pass excludePlayers with the player names.
 When the user mentions a league like "Premier League" or "La Liga", use the competition parameter.
 When the user asks for "likely starters" or "confirmed starters", use minStartProbability (70 = likely, 90 = very likely).`,
+
+    "in-season": `The user is on the In Season tab managing in-season competitions (Limited/Rare/SR/Unique cards, league-specific).
+Rules: min 4 out of 5 cards must be in-season eligible. NO common cards. League-specific players only (except cross-league competitions like Challenger/Contender).
+Captain gets +50% score bonus. Dynamic streak thresholds per competition (NOT the hardcoded Stellar thresholds).
+Use in_season_recommend to generate optimized lineups for the selected competition.
+Use in_season_status for an overview of all competitions and which need attention.
+Use in_season_lineup_status to check the current lineup state.
+When the user says "fill" or "generate", use in_season_recommend with the appropriate target score.`,
   };
 
   const screen = screenInstructions[ctx.activeTab] ?? `The user is browsing their Sorare collection.`;
