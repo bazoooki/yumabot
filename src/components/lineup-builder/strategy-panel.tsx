@@ -148,7 +148,7 @@ export function StrategyPanel({ cards }: StrategyPanelProps) {
   }, [slots, captainIndex, filledCount, playerIntel]);
 
   const handleFillFromBatch = async (batchCards: SorareCard[]) => {
-    await autoFillWithStrategy(batchCards);
+    await autoFillWithStrategy(batchCards, playerIntel);
   };
 
   const PLAY_MODES: { key: PlayMode; label: string; icon: typeof Zap; color: string; bg: string }[] = [

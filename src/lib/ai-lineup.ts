@@ -232,6 +232,12 @@ export function computeStrategyMetrics(
 
   const startProb = startProbability ?? (hasGame ? 0.75 : 0);
 
+  // Scale expected score and floor by start probability.
+  // A 0% starter has ~0 expected value; a 10% starter keeps ~10%.
+  // Ceiling stays unscaled (represents upside IF they play).
+  expectedScore *= startProb;
+  floor *= startProb;
+
   // Classify strategy tag
   let strategyTag: StrategyTag;
   let strategyReason: string;
@@ -279,10 +285,10 @@ export function computeStrategyScore(metrics: CardStrategyMetrics, level: number
     weights.consistency * normalizedConsistency +
     weights.startProb * normalizedStartProb;
 
-  // Non-starter penalty escalates with level
+  // Non-starter penalty — aggressive to avoid picking players who won't play
   if (metrics.startProbability < 0.5) {
-    const penalty = 1 - (1 - metrics.startProbability) * (0.3 + level * 0.1);
-    score *= Math.max(0.1, penalty);
+    // 0% start → score *= 0.02, 10% → ~0.05, 30% → ~0.20, 49% → ~0.50
+    score *= Math.max(0.02, metrics.startProbability ** 1.5 * 2);
   }
 
   return score;
@@ -294,6 +300,7 @@ export function scoreCardsWithStrategy(
   starterProbs?: Record<string, number | null> | null,
   playerIntelMap?: Record<string, PlayerIntel> | null,
 ): ScoredCardWithStrategy[] {
+  console.log("[SCORE] scoreCardsWithStrategy called with starterProbs:", starterProbs ? Object.keys(starterProbs).length + " players" : "NONE", "playerIntelMap:", playerIntelMap ? Object.keys(playerIntelMap).length + " players" : "NONE");
   return cards
     .map((card) => {
       const playerSlug = card.anyPlayer?.slug;
@@ -334,9 +341,17 @@ export async function recommendLineupWithStrategy(
   cards: SorareCard[],
   level: number,
   count = 5,
+  playerIntelMap?: Record<string, PlayerIntel> | null,
 ): Promise<{ lineup: ScoredCardWithStrategy[]; probability: LineupProbability }> {
-  // Tier 1: score all cards, take top candidates
-  const tier1 = scoreCardsWithStrategy(cards, level);
+  // Build starterProbs from playerIntelMap for scoreCardsWithStrategy
+  const starterProbs: Record<string, number | null> | undefined = playerIntelMap
+    ? Object.fromEntries(
+        Object.entries(playerIntelMap).map(([slug, intel]) => [slug, intel.starterProbability]),
+      )
+    : undefined;
+
+  // Tier 1: score all cards with real starter data, take top candidates
+  const tier1 = scoreCardsWithStrategy(cards, level, starterProbs, playerIntelMap);
   const candidates = tier1.slice(0, 15);
 
   // Tier 2: fetch real score history for top candidates
@@ -354,14 +369,21 @@ export async function recommendLineupWithStrategy(
         .filter((s) => s.score > 0)
         .map((s) => s.score);
 
-      // Extract start probability from game stats
-      const gamesWithStats = scores.filter((s) => s.anyPlayerGameStats);
-      let startProb = 0.75;
-      if (gamesWithStats.length > 0) {
-        const starterOdds = gamesWithStats
-          .map((s) => (s.anyPlayerGameStats?.footballPlayingStatusOdds?.starterOddsBasisPoints ?? 5000) / 10000)
-          .reduce((a, b) => a + b, 0) / gamesWithStats.length;
-        startProb = starterOdds;
+      // Use real-time starter probability from playerIntelMap (upcoming game odds)
+      // Fall back to historical average only if no real-time data
+      const intelProb = player.slug ? playerIntelMap?.[player.slug]?.starterProbability : undefined;
+      let startProb: number;
+      if (intelProb != null) {
+        startProb = intelProb / 100;
+      } else {
+        const gamesWithStats = scores.filter((s) => s.anyPlayerGameStats);
+        if (gamesWithStats.length > 0) {
+          startProb = gamesWithStats
+            .map((s) => (s.anyPlayerGameStats?.footballPlayingStatusOdds?.starterOddsBasisPoints ?? 5000) / 10000)
+            .reduce((a, b) => a + b, 0) / gamesWithStats.length;
+        } else {
+          startProb = 0.75;
+        }
       }
 
       const strategy = computeStrategyMetrics(sc.card, scoreValues, startProb);

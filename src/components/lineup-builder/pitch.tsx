@@ -99,32 +99,66 @@ function ScoreHeader({
   projectedTotal: number;
 }) {
   const streakLevel = STREAK_LEVELS.find((l) => l.level === currentLevel);
+  const isFinal = currentLevel === 6;
   const displayScore = showLive ? projectedTotal : Math.round(totalEstimate);
   const progressPct = Math.min(100, (displayScore / targetScore) * 100);
   const actualPct = showLive
     ? Math.min(100, (actualTotal / targetScore) * 100)
     : 0;
   const onTrack = displayScore >= targetScore;
+  const { setCurrentLevel } = useLineupStore();
 
   return (
     <div className="px-4 py-3 border-b border-zinc-800/80">
-      {/* Top row: title + score */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-white tracking-wide">
-            L{currentLevel}
-          </span>
-          <span className="text-[10px] text-zinc-500 font-medium">
+      {/* Level selector + reward */}
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-1.5">
+          {STREAK_LEVELS.map((lvl) => {
+            const isActive = lvl.level === currentLevel;
+            const isPast = lvl.level < currentLevel;
+            return (
+              <button
+                key={lvl.level}
+                onClick={() => setCurrentLevel(lvl.level)}
+                className={cn(
+                  "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all",
+                  isActive
+                    ? isFinal
+                      ? "bg-amber-500 border-amber-400 text-black shadow-md shadow-amber-500/30"
+                      : "bg-purple-500 border-purple-400 text-white shadow-md shadow-purple-500/30"
+                    : isPast
+                      ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
+                      : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-500",
+                )}
+              >
+                {lvl.level}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-bold text-white">{targetScore} pts</span>
+          <span className={cn(
+            "text-sm font-bold",
+            isFinal ? "text-amber-400" : "text-green-400",
+          )}>
             {streakLevel?.reward}
           </span>
           {showLive && (
-            <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 ml-1">
+            <span className="flex items-center gap-1 text-[9px] font-bold text-green-400">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               LIVE
             </span>
           )}
         </div>
+      </div>
 
+      {/* Score + progress */}
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px] text-zinc-600">
+          {filledCount}/5 players
+        </span>
         <div className="flex items-baseline gap-1.5">
           {showLive && actualTotal !== projectedTotal && (
             <span className="text-sm font-bold text-white">{actualTotal}</span>
@@ -141,32 +175,18 @@ function ScoreHeader({
           >
             {showLive && actualTotal !== projectedTotal ? `~${projectedTotal}` : displayScore > 0 ? `~${displayScore}` : "—"}
           </span>
-          <span className="text-xs text-zinc-600">/</span>
-          <span className="text-xs text-zinc-400 font-semibold">
-            {targetScore}
-          </span>
+          <span className="text-xs text-zinc-600">/ {targetScore}</span>
         </div>
       </div>
 
       {/* Progress bar */}
       <div className="relative h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-        {/* Projected fill (lighter) */}
-        <div
-          className={cn(
-            "absolute inset-y-0 left-0 rounded-full transition-all duration-500",
-            onTrack ? "bg-green-500/30" : "bg-purple-500/25",
-          )}
-          style={{ width: `${progressPct}%` }}
-        />
-        {/* Actual fill (solid, live only) */}
-        {showLive && (
+        {showLive ? (
           <div
             className="absolute inset-y-0 left-0 bg-green-500 rounded-full transition-all duration-500"
             style={{ width: `${actualPct}%` }}
           />
-        )}
-        {/* Non-live estimated fill */}
-        {!showLive && filledCount > 0 && (
+        ) : filledCount > 0 ? (
           <div
             className={cn(
               "absolute inset-y-0 left-0 rounded-full transition-all duration-500",
@@ -174,33 +194,22 @@ function ScoreHeader({
             )}
             style={{ width: `${progressPct}%` }}
           />
-        )}
+        ) : null}
       </div>
 
-      {/* Bottom row: player count + status */}
-      <div className="flex items-center justify-between mt-1.5">
-        <span className="text-[10px] text-zinc-600">
-          {filledCount}/5 players
-        </span>
-        {filledCount > 0 && (
+      {/* Status text */}
+      {filledCount > 0 && (
+        <div className="flex justify-end mt-1">
           <span
             className={cn(
               "text-[10px] font-bold",
-              onTrack
-                ? "text-green-400"
-                : displayScore >= targetScore * 0.85
-                  ? "text-yellow-400"
-                  : "text-zinc-500",
+              onTrack ? "text-green-400" : displayScore >= targetScore * 0.85 ? "text-yellow-400" : "text-zinc-500",
             )}
           >
-            {onTrack
-              ? "ON TRACK"
-              : displayScore >= targetScore * 0.85
-                ? "CLOSE"
-                : `${Math.round(targetScore - displayScore)} pts short`}
+            {onTrack ? "ON TRACK" : displayScore >= targetScore * 0.85 ? "CLOSE" : `${Math.round(targetScore - displayScore)} pts short`}
           </span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

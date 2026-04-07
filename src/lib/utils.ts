@@ -52,6 +52,59 @@ export interface KickoffGroup<T> {
   items: T[];
 }
 
+/** Group cards by calendar day (Today, Tomorrow, Wed Apr 9, etc.) */
+export function groupByDay<T extends { card: SorareCard }>(
+  items: T[],
+): KickoffGroup<T>[] {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const dayMap = new Map<string, { label: string; date: Date; items: T[] }>();
+
+  for (const item of items) {
+    const dateStr = item.card.anyPlayer?.activeClub?.upcomingGames?.[0]?.date;
+    if (!dateStr) continue;
+    const d = new Date(dateStr);
+    const dayKey = d.toDateString();
+
+    if (!dayMap.has(dayKey)) {
+      const isToday = dayKey === now.toDateString();
+      const isTomorrow = dayKey === tomorrow.toDateString();
+      const label = isToday ? "Today" : isTomorrow ? "Tomorrow" : d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+      dayMap.set(dayKey, { label, date: d, items: [] });
+    }
+    dayMap.get(dayKey)!.items.push(item);
+  }
+
+  const groups: KickoffGroup<T>[] = [...dayMap.values()]
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map((g) => {
+      const uniqueGames = new Set(
+        g.items.map((item) => {
+          const game = item.card.anyPlayer?.activeClub?.upcomingGames?.[0];
+          return game ? `${game.homeTeam.code}-${game.awayTeam.code}` : "";
+        }),
+      );
+      return {
+        windowLabel: `${g.label} — ${uniqueGames.size} game${uniqueGames.size !== 1 ? "s" : ""}`,
+        kickoffTime: g.date,
+        gameCount: uniqueGames.size,
+        items: g.items,
+      };
+    });
+
+  // No-game group
+  const noGame = items.filter(
+    (item) => !item.card.anyPlayer?.activeClub?.upcomingGames?.[0]?.date,
+  );
+  if (noGame.length > 0) {
+    groups.push({ windowLabel: "No upcoming game", kickoffTime: new Date(0), gameCount: 0, items: noGame });
+  }
+
+  return groups;
+}
+
 export function groupByKickoffWindow<T extends { card: SorareCard }>(
   items: T[],
   windowMinutes = 30,

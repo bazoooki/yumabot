@@ -146,23 +146,25 @@ export function CommandBar({ activeTab, cards }: Props) {
     >
       {/* Advanced (lineup only, hidden when conversation active) */}
       {isLineup && !isExpanded && (
-        <CommandBarAdvanced onSubmit={handleSuggestion} />
+        <CommandBarAdvanced onSubmit={handleSuggestion} cards={cards} />
       )}
 
-      {/* Input */}
-      <CommandBarInput
-        ref={inputRef}
-        activeTab={activeTab}
-        value={input}
-        onChange={setInput}
-        onSubmit={handleSubmit}
-        onClose={handleClose}
-        onSuggestion={handleSuggestion}
-        isStreaming={isStreaming}
-        isExpanded={isExpanded}
-        showSeparator={isLineup && !isExpanded}
-        onFocus={() => setIsFocused(true)}
-      />
+      {/* Input (top when no conversation, bottom when expanded) */}
+      {!isExpanded && (
+        <CommandBarInput
+          ref={inputRef}
+          activeTab={activeTab}
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSubmit}
+          onClose={handleClose}
+          onSuggestion={handleSuggestion}
+          isStreaming={isStreaming}
+          isExpanded={isExpanded}
+          showSeparator={isLineup && !isExpanded}
+          onFocus={() => setIsFocused(true)}
+        />
+      )}
 
       {/* Conversation thread */}
       <CommandBarResponse
@@ -172,6 +174,23 @@ export function CommandBar({ activeTab, cards }: Props) {
         error={error}
         isStreaming={isStreaming}
       />
+
+      {/* Input below conversation when expanded */}
+      {isExpanded && (
+        <CommandBarInput
+          ref={inputRef}
+          activeTab={activeTab}
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSubmit}
+          onClose={handleClose}
+          onSuggestion={handleSuggestion}
+          isStreaming={isStreaming}
+          isExpanded={isExpanded}
+          showSeparator={false}
+          onFocus={() => setIsFocused(true)}
+        />
+      )}
     </div>
   );
 }

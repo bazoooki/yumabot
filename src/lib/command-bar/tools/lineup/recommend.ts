@@ -1,5 +1,5 @@
 import type { ToolHandler } from "../../tool-registry";
-import type { SorareCard, LineupPosition } from "@/lib/types";
+import type { SorareCard, LineupPosition, PlayerIntel } from "@/lib/types";
 import { useLineupStore, STREAK_LEVELS } from "@/lib/lineup-store";
 import {
   scoreCardsWithStrategy,
@@ -10,6 +10,21 @@ import {
   POSITION_TO_SLOT,
   STRATEGY_TO_PLAY_MODE,
 } from "@/lib/normalization";
+
+/** Read cached player intel from the lineup store (populated by usePlayerIntel hook) */
+function getPlayerIntelFromStore(): {
+  starterProbs: Record<string, number | null>;
+  playerIntelMap: Record<string, PlayerIntel>;
+} {
+  const intel = useLineupStore.getState().cachedPlayerIntel;
+  if (!intel) return { starterProbs: {}, playerIntelMap: {} };
+
+  const starterProbs: Record<string, number | null> = {};
+  for (const [slug, data] of Object.entries(intel)) {
+    starterProbs[slug] = data.starterProbability;
+  }
+  return { starterProbs, playerIntelMap: intel };
+}
 
 export function createRecommendTools(cards: SorareCard[]): ToolHandler[] {
   return [
@@ -154,8 +169,12 @@ export function createRecommendTools(cards: SorareCard[]): ToolHandler[] {
           return `No ${rarity === "common" ? "Stellar" : rarity} cards found with games ${batchLabel}.`;
         }
 
-        // Score filtered cards with strategy metrics
-        const scored = scoreCardsWithStrategy(batchFiltered, level);
+        // Read cached player intel from store (populated by usePlayerIntel hook)
+        const { starterProbs, playerIntelMap } = getPlayerIntelFromStore();
+        console.log("[RECOMMEND] starterProbs from store:", Object.keys(starterProbs).length, "players");
+
+        // Score filtered cards with strategy metrics + real starter data
+        const scored = scoreCardsWithStrategy(batchFiltered, level, starterProbs, playerIntelMap);
         let eligible = scored.filter((sc) => sc.hasGame && !sc.isInjured);
 
         // Filter by minimum start probability

@@ -92,9 +92,71 @@ export interface FixtureGame {
   id: string;
   date: string;
   statusTyped: string;
+  sport: string;
+  homeScore: number;
+  awayScore: number;
   homeTeam: { code: string; name: string; slug: string; pictureUrl: string };
   awayTeam: { code: string; name: string; slug: string; pictureUrl: string };
   competition: { name: string };
+}
+
+export interface StatScore {
+  category: string;
+  stat: string;
+  statValue: number;
+  totalScore: number;
+  points: number;
+}
+
+export interface GamePlayerScore {
+  score: number;
+  scoreStatus: string;
+  projectedScore: number | null;
+  positionTyped: string;
+  anyPlayer: {
+    slug: string;
+    displayName: string;
+    squaredPictureUrl: string | null;
+    activeClub: { code: string } | null;
+  };
+  anyPlayerGameStats: {
+    minsPlayed: number;
+    fieldStatus: string | null;
+  } | null;
+  detailedScore: StatScore[];
+  positiveDecisiveStats: StatScore[];
+  negativeDecisiveStats: StatScore[];
+}
+
+/** A detected stat change between two game updates */
+export interface GameEvent {
+  playerSlug: string;
+  playerName: string;
+  teamCode: string;
+  minute: number;
+  stat: string;
+  category: "decisive" | "negative" | "all_around";
+  pointsDelta: number;
+  newValue: number;
+  playerTotalScore: number;
+  isOwned?: boolean;
+  /** For substitution events */
+  subPlayerIn?: string;
+  subPlayerOut?: string;
+  isInjury?: boolean;
+  timestamp: number;
+}
+
+export interface GameDetail {
+  id: string;
+  date: string;
+  statusTyped: string;
+  homeScore: number;
+  awayScore: number;
+  homeTeam: { code: string; name: string; slug: string; pictureUrl: string };
+  awayTeam: { code: string; name: string; slug: string; pictureUrl: string };
+  competition: { name: string };
+  playerGameScores: GamePlayerScore[];
 }
 
 export interface Fixture {

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { sorareClient } from "@/lib/sorare-client";
-import { UPCOMING_FIXTURE_QUERY } from "@/lib/queries";
+import { UPCOMING_FIXTURE_QUERY, CURRENT_FIXTURE_QUERY } from "@/lib/queries";
 import type { Fixture } from "@/lib/types";
 
 interface FixtureResponse {
@@ -9,16 +9,19 @@ interface FixtureResponse {
   };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const result =
-      await sorareClient.request<FixtureResponse>(UPCOMING_FIXTURE_QUERY);
+    const type = request.nextUrl.searchParams.get("type") ?? "upcoming";
+    const query =
+      type === "live" ? CURRENT_FIXTURE_QUERY : UPCOMING_FIXTURE_QUERY;
+
+    const result = await sorareClient.request<FixtureResponse>(query);
 
     const fixture = result?.so5?.so5Fixture;
     if (!fixture) {
       return NextResponse.json(
-        { error: "No upcoming fixture found" },
-        { status: 404 }
+        { error: `No ${type} fixture found` },
+        { status: 404 },
       );
     }
 

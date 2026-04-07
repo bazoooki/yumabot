@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SorareCard, LineupSlot, LineupPosition, ScoredCardWithStrategy, LineupProbability } from "./types";
+import type { SorareCard, LineupSlot, LineupPosition, ScoredCardWithStrategy, LineupProbability, PlayerIntel } from "./types";
 import { recommendLineup, recommendLineupWithStrategy } from "./ai-lineup";
 import { positionMatchesSlot } from "./normalization";
 
@@ -32,6 +32,8 @@ interface LineupStore {
   isAutoFilling: boolean;
   playMode: PlayMode;
   mergeWindow: number | null; // null = auto from level
+  cachedPlayerIntel: Record<string, PlayerIntel> | null;
+  setCachedPlayerIntel: (intel: Record<string, PlayerIntel>) => void;
   setTargetScore: (score: number) => void;
   setCurrentLevel: (level: number) => void;
   selectSlot: (index: number | null) => void;
@@ -39,7 +41,7 @@ interface LineupStore {
   removeCard: (slotIndex: number) => void;
   clearLineup: () => void;
   autoFill: (cards: SorareCard[]) => void;
-  autoFillWithStrategy: (cards: SorareCard[]) => Promise<void>;
+  autoFillWithStrategy: (cards: SorareCard[], playerIntelMap?: Record<string, PlayerIntel> | null) => Promise<void>;
   addCardToNextEmpty: (card: SorareCard) => void;
   setCaptain: (slotIndex: number | null) => void;
   setPlayMode: (mode: PlayMode) => void;
@@ -56,7 +58,9 @@ export const useLineupStore = create<LineupStore>((set, get) => ({
   isAutoFilling: false,
   playMode: "auto" as PlayMode,
   mergeWindow: null as number | null,
+  cachedPlayerIntel: null,
 
+  setCachedPlayerIntel: (intel) => set({ cachedPlayerIntel: intel }),
   setTargetScore: (score) => set({ targetScore: score }),
 
   setCurrentLevel: (level) => {
@@ -136,11 +140,11 @@ export const useLineupStore = create<LineupStore>((set, get) => ({
       return { slots, selectedSlotIndex: null };
     }),
 
-  autoFillWithStrategy: async (cards) => {
+  autoFillWithStrategy: async (cards, playerIntelMap) => {
     set({ isAutoFilling: true, strategyResults: null, lineupProbability: null });
     try {
       const level = get().currentLevel;
-      const { lineup, probability } = await recommendLineupWithStrategy(cards, level);
+      const { lineup, probability } = await recommendLineupWithStrategy(cards, level, 5, playerIntelMap);
 
       const slots: LineupSlot[] = DEFAULT_SLOTS.map((s) => ({ ...s, card: null, isCaptain: false }));
       const placed = new Set<string>();

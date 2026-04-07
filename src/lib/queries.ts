@@ -171,6 +171,9 @@ export const UPCOMING_FIXTURE_QUERY = gql`
           id
           date
           statusTyped
+          sport
+          homeScore
+          awayScore
           homeTeam {
             code
             name
@@ -205,6 +208,9 @@ export const CURRENT_FIXTURE_QUERY = gql`
           id
           date
           statusTyped
+          sport
+          homeScore
+          awayScore
           homeTeam {
             code
             name
@@ -219,6 +225,76 @@ export const CURRENT_FIXTURE_QUERY = gql`
           }
           competition {
             name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const GAME_DETAIL_QUERY = gql`
+  query GameDetail($gameId: ID!) {
+    anyGame(id: $gameId) {
+      id
+      date
+      statusTyped
+      homeScore
+      awayScore
+      homeTeam {
+        code
+        name
+        slug
+        pictureUrl
+      }
+      awayTeam {
+        code
+        name
+        slug
+        pictureUrl
+      }
+      competition {
+        name
+      }
+      playerGameScores {
+        score
+        scoreStatus
+        projectedScore
+        positionTyped
+        anyPlayer {
+          slug
+          displayName
+          squaredPictureUrl
+          activeClub {
+            code
+          }
+        }
+        anyPlayerGameStats {
+          ... on PlayerGameStats {
+            minsPlayed
+            fieldStatus
+          }
+        }
+        detailedScore {
+          category
+          stat
+          statValue
+          totalScore
+          points
+        }
+        ... on PlayerGameScore {
+          positiveDecisiveStats {
+            category
+            stat
+            statValue
+            totalScore
+            points
+          }
+          negativeDecisiveStats {
+            category
+            stat
+            statValue
+            totalScore
+            points
           }
         }
       }

@@ -13,6 +13,54 @@ import { processOffer, processOfferLifecycle, processCardState } from "./anomaly
 
 const WS_URL = "wss://ws.sorare.com/cable";
 
+// ── Game Subscription Query ──
+
+// aGameWasUpdated returns full game data when a game state changes (score, status, etc.)
+// Depth: subscription > aGameWasUpdated > playerGameScores > anyPlayer > activeClub = 5
+// Game subscription — includes player scores but not detailedScore breakdown (stays under 1500 complexity with APIKEY)
+const GAME_UPDATED_QUERY = (gameId: string) => `aGameWasUpdated(id: "${gameId}") {
+  id
+  date
+  statusTyped
+  homeScore
+  awayScore
+  homeTeam {
+    code
+    name
+    slug
+    pictureUrl
+  }
+  awayTeam {
+    code
+    name
+    slug
+    pictureUrl
+  }
+  competition {
+    name
+  }
+  playerGameScores {
+    score
+    scoreStatus
+    projectedScore
+    positionTyped
+    anyPlayer {
+      slug
+      displayName
+      squaredPictureUrl
+      activeClub {
+        code
+      }
+    }
+    anyPlayerGameStats {
+      ... on PlayerGameStats {
+        minsPlayed
+        fieldStatus
+      }
+    }
+  }
+}`;
+
 // ── Subscription Queries ──
 
 // Depth limit: 7 without APIKEY. Max path now:
@@ -134,6 +182,12 @@ class MarketWebSocketManager extends EventEmitter {
   private _advancedEnabled = false;
   private _advancedClientCount = 0;
 
+  /** Game subscriptions: gameId → { subEntry, clientCount } */
+  private _gameSubscriptions = new Map<
+    string,
+    { entry: SubEntry; clientCount: number }
+  >();
+
   /** Deduplication maps */
   private _seenOffers = new Map<string, string>();
   private _seenLifecycle = new Map<string, string>();
@@ -203,6 +257,51 @@ class MarketWebSocketManager extends EventEmitter {
       this.send({ identifier: entry.identifier, command: "unsubscribe" });
     }
     this.subscriptions.delete("anyCardWasUpdated");
+  }
+
+  // ── Game Subscription Management ──
+
+  subscribeToGame(gameId: string) {
+    const existing = this._gameSubscriptions.get(gameId);
+    if (existing) {
+      existing.clientCount++;
+      console.log(`[Market WS] Game ${gameId} client count: ${existing.clientCount}`);
+      return;
+    }
+
+    const entry: SubEntry = {
+      name: `aGameWasUpdated_${gameId}` as SubName,
+      identifier: JSON.stringify({
+        channel: "GraphqlChannel",
+        channelId: `game_${gameId}_${Math.random().toString(36).substring(2, 8)}`,
+      }),
+      query: GAME_UPDATED_QUERY(gameId),
+      confirmed: false,
+    };
+
+    this._gameSubscriptions.set(gameId, { entry, clientCount: 1 });
+
+    // If WS is open, subscribe immediately
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.send({ identifier: entry.identifier, command: "subscribe" });
+    }
+
+    console.log(`[Market WS] Subscribed to game: ${gameId}`);
+  }
+
+  unsubscribeFromGame(gameId: string) {
+    const existing = this._gameSubscriptions.get(gameId);
+    if (!existing) return;
+
+    existing.clientCount--;
+    if (existing.clientCount > 0) return;
+
+    // No more clients — unsubscribe
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.send({ identifier: existing.entry.identifier, command: "unsubscribe" });
+    }
+    this._gameSubscriptions.delete(gameId);
+    console.log(`[Market WS] Unsubscribed from game: ${gameId}`);
   }
 
   private createSubEntry(name: SubName): SubEntry {
@@ -290,6 +389,10 @@ class MarketWebSocketManager extends EventEmitter {
         for (const entry of this.subscriptions.values()) {
           this.send({ identifier: entry.identifier, command: "subscribe" });
         }
+        // Re-subscribe active game subscriptions
+        for (const { entry } of this._gameSubscriptions.values()) {
+          this.send({ identifier: entry.identifier, command: "subscribe" });
+        }
         break;
 
       case "ping":
@@ -301,7 +404,6 @@ class MarketWebSocketManager extends EventEmitter {
         const entry = this.findEntryByIdentifier(confirmedId);
         if (entry) {
           entry.confirmed = true;
-          // Send the GraphQL execute query for this subscription
           this.send({
             identifier: entry.identifier,
             command: "message",
@@ -311,6 +413,21 @@ class MarketWebSocketManager extends EventEmitter {
             }),
           });
           console.log(`[Market WS] Subscription confirmed: ${entry.name}`);
+        } else {
+          // Check game subscriptions
+          const gameEntry = this.findGameEntryByIdentifier(confirmedId);
+          if (gameEntry) {
+            gameEntry.confirmed = true;
+            this.send({
+              identifier: gameEntry.identifier,
+              command: "message",
+              data: JSON.stringify({
+                action: "execute",
+                query: `subscription { ${gameEntry.query} }`,
+              }),
+            });
+            console.log(`[Market WS] Game subscription confirmed: ${gameEntry.name}`);
+          }
         }
         // Set connected once base subscription is confirmed
         const baseEntry = this.subscriptions.get("tokenOfferWasUpdated");
@@ -357,6 +474,12 @@ class MarketWebSocketManager extends EventEmitter {
           if (sub.card) {
             this.handleCardStateMessage(sub.card, sub.eventType);
           }
+        } else if (resultData.aGameWasUpdated) {
+          // Game update — emit with the full game data
+          const gameData = resultData.aGameWasUpdated as Record<string, unknown>;
+          const gameId = gameData.id as string;
+          console.log(`[Market WS] Game update received: ${gameId} (status: ${gameData.statusTyped})`);
+          this.emit("game_updated", gameData);
         }
         break;
       }
@@ -365,6 +488,13 @@ class MarketWebSocketManager extends EventEmitter {
 
   private findEntryByIdentifier(identifier: string): SubEntry | undefined {
     for (const entry of this.subscriptions.values()) {
+      if (entry.identifier === identifier) return entry;
+    }
+    return undefined;
+  }
+
+  private findGameEntryByIdentifier(identifier: string): SubEntry | undefined {
+    for (const { entry } of this._gameSubscriptions.values()) {
       if (entry.identifier === identifier) return entry;
     }
     return undefined;
@@ -633,6 +763,9 @@ class MarketWebSocketManager extends EventEmitter {
     }
     // Reset confirmation state
     for (const entry of this.subscriptions.values()) {
+      entry.confirmed = false;
+    }
+    for (const { entry } of this._gameSubscriptions.values()) {
       entry.confirmed = false;
     }
     this.ws = null;

@@ -4,7 +4,6 @@ import { RotateCcw } from "lucide-react";
 import { useLineupStore } from "@/lib/lineup-store";
 import { Pitch } from "./pitch";
 import { CardPicker } from "./card-picker";
-import { GameBoard } from "./game-board";
 import type { SorareCard } from "@/lib/types";
 
 interface LineupBuilderProps {
@@ -19,7 +18,6 @@ export function LineupBuilder({ cards }: LineupBuilderProps) {
     <div className="flex flex-1 overflow-hidden h-full">
       {/* Left: Pitch — compact */}
       <div className="w-[45%] min-w-[400px] shrink-0 flex flex-col border-r border-zinc-800">
-        <GameBoard />
         <div className="flex-1 overflow-hidden">
           <Pitch cards={cards} />
         </div>

@@ -3,14 +3,13 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, X, ChevronDown, LayoutGrid, List } from "lucide-react";
 import * as Tabs from "@radix-ui/react-tabs";
-import { cn, groupByKickoffWindow, getMergeWindowForLevel } from "@/lib/utils";
-import { usePlayerIntel, useLiveScores, usePlayerForm } from "@/lib/hooks";
+import { cn, groupByDay } from "@/lib/utils";
+import { usePlayerIntel, usePlayerForm } from "@/lib/hooks";
 import { useLineupStore } from "@/lib/lineup-store";
 import { scoreCards, scoreCardsWithStrategy } from "@/lib/ai-lineup";
 import { LineupCard } from "./lineup-card";
 import { GridCard } from "./grid-card";
 import { StrategyPanel } from "./strategy-panel";
-import { LiveTracker } from "./live-tracker";
 import { CommandBar } from "@/components/command-bar/command-bar";
 import type { SorareCard, RarityType, LineupPosition, ScoredCardWithStrategy } from "@/lib/types";
 import type { ScoredCard } from "@/lib/ai-lineup";
@@ -25,21 +24,12 @@ interface CardPickerProps {
 
 export function CardPicker({ cards }: CardPickerProps) {
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortOption>("score");
+  const [sort, setSort] = useState<SortOption>("soon");
   const [rarityFilter, setRarityFilter] = useState<RarityType>("common");
   const [sidebarTab, setSidebarTab] = useState("cards");
   const [viewMode, setViewMode] = useState<"list" | "grid">("grid");
-  const { slots, selectedSlotIndex, selectSlot, addCardToNextEmpty, currentLevel, mergeWindow } = useLineupStore();
-  const effectiveMergeWindow = mergeWindow ?? getMergeWindowForLevel(currentLevel);
-  const { isAnyGameLive } = useLiveScores();
+  const { slots, selectedSlotIndex, selectSlot, addCardToNextEmpty, currentLevel } = useLineupStore();
   const playerFormData = usePlayerForm(cards);
-
-  // Auto-switch to Live tab when games start
-  useEffect(() => {
-    if (isAnyGameLive && sidebarTab !== "live") {
-      setSidebarTab("live");
-    }
-  }, [isAnyGameLive, sidebarTab]);
 
   const lineupSlugs = useMemo(
     () => new Set(slots.filter((s) => s.card).map((s) => s.card!.slug)),
@@ -52,6 +42,12 @@ export function CardPicker({ cards }: CardPickerProps) {
 
   // Shared player intel (starter %, fieldStatus, reliability) for all players
   const playerIntel = usePlayerIntel(cards);
+  const setCachedPlayerIntel = useLineupStore((s) => s.setCachedPlayerIntel);
+
+  // Cache player intel in the store so command-bar tools can access it
+  useEffect(() => {
+    if (playerIntel) setCachedPlayerIntel(playerIntel);
+  }, [playerIntel, setCachedPlayerIntel]);
 
   // Extract starter probs for strategy scoring backward compat
   const starterProbs = useMemo(() => {
@@ -141,11 +137,11 @@ export function CardPicker({ cards }: CardPickerProps) {
     }
   }, [rarityCards, search, sort, positionFilter, currentLevel, starterProbs]);
 
-  // Group cards for "soon" sort
+  // Group cards by day for "soon" sort
   const groupedCards = useMemo(() => {
     if (sort !== "soon") return null;
-    return groupByKickoffWindow(filteredCards as ScoredCardWithStrategy[], effectiveMergeWindow);
-  }, [filteredCards, sort, effectiveMergeWindow]);
+    return groupByDay(filteredCards as ScoredCardWithStrategy[]);
+  }, [filteredCards, sort]);
 
   function getCardProps(sc: ScoredCard | ScoredCardWithStrategy) {
     const playerSlug = sc.card.anyPlayer?.slug;
@@ -190,13 +186,6 @@ export function CardPicker({ cards }: CardPickerProps) {
         >
           Strategy
         </Tabs.Trigger>
-        <Tabs.Trigger
-          value="live"
-          className="flex-1 py-2.5 text-xs font-semibold text-zinc-500 transition-colors data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-green-500"
-        >
-          Live
-          {isAnyGameLive && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block ml-1.5" />}
-        </Tabs.Trigger>
       </Tabs.List>
 
       {/* Cards Tab */}
@@ -208,26 +197,6 @@ export function CardPicker({ cards }: CardPickerProps) {
 
         {/* Card Filters */}
         <div className="px-4 py-3 border-b border-zinc-800 space-y-2.5 shrink-0">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Search player, club, league..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 bg-zinc-800/50 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
           {/* Rarity + Sort + View in one row */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
@@ -289,22 +258,25 @@ export function CardPicker({ cards }: CardPickerProps) {
             </div>
           </div>
 
-          {/* Position filter indicator */}
-          {selectedSlotPosition && (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30">
-                <span className="text-[11px] text-purple-300">
-                  Showing: <span className="font-bold text-purple-200">{selectedSlotPosition === "EX" ? "Outfield players" : positionFilter + "s"}</span>
-                </span>
-              </div>
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Search player, club, league..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 bg-zinc-800/50 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
+            />
+            {search && (
               <button
-                onClick={() => selectSlot(null)}
-                className="text-[11px] text-zinc-500 hover:text-white transition-colors"
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
               >
-                Clear filter
+                <X className="w-4 h-4" />
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Card List */}
@@ -359,11 +331,6 @@ export function CardPicker({ cards }: CardPickerProps) {
       {/* Strategy Tab */}
       <Tabs.Content value="strategy" className="flex-1 flex flex-col overflow-hidden">
         <StrategyPanel cards={cards} />
-      </Tabs.Content>
-
-      {/* Live Tab */}
-      <Tabs.Content value="live" className="flex-1 flex flex-col overflow-hidden">
-        <LiveTracker />
       </Tabs.Content>
     </Tabs.Root>
   );
