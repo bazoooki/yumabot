@@ -195,10 +195,10 @@ function GalleryPage() {
 
           {/* Keep market & live-games always mounted so streams persist */}
           <div className={activeTab === "market" ? "flex flex-1 overflow-hidden" : "hidden"}>
-            <LiveMarketTab cards={allCards} />
+            <LiveMarketTab cards={allCards} userSlug={userSlug} />
           </div>
           <div className={activeTab === "live-games" ? "flex flex-1 overflow-hidden" : "hidden"}>
-            <LiveGamesTab cards={allCards} />
+            <LiveGamesTab cards={allCards} userSlug={userSlug} />
           </div>
         </>
       )}

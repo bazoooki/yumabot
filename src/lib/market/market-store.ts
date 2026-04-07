@@ -149,7 +149,7 @@ export const useMarketStore = create<MarketState>((set) => ({
     myPlayersOnly: false,
     sort: "recent",
     tradeType: null,
-    minSales: 2,
+    minSales: 1,
   },
   soundEnabled: false,
   expandedPlayer: null,

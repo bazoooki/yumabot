@@ -13,20 +13,51 @@ const RARITY_RANK: Record<string, number> = { unique: 5, super_rare: 4, rare: 3,
 interface Props {
   gameId: string;
   cards: SorareCard[];
+  userSlug: string;
 }
 
-export function MatchRoom({ gameId, cards }: Props) {
+export function MatchRoom({ gameId, cards, userSlug }: Props) {
   const { game, isLoading, isLive, connected, updateCount, events: liveEvents } =
     useGameStream(gameId);
   const [activeTab, setActiveTab] = useState<"lineups" | "stats" | "players">(
     "lineups",
   );
   const [chatOpen, setChatOpen] = useState(false);
+  const [lineupPlayerSlugs, setLineupPlayerSlugs] = useState<Set<string> | null>(null);
   const feedVariant = 8;
   const events = liveEvents;
 
+  // Fetch user's active lineup to know which cards are actually in play
+  useEffect(() => {
+    if (!userSlug) return;
+    fetch(`/api/in-season/competitions?userSlug=${encodeURIComponent(userSlug)}&type=LIVE&seasonality=all`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data?.competitions) return;
+        const slugs = new Set<string>();
+        for (const comp of data.competitions) {
+          for (const team of comp.teams ?? []) {
+            for (const slot of team.slots ?? []) {
+              if (slot.playerSlug) slugs.add(slot.playerSlug);
+            }
+          }
+        }
+        setLineupPlayerSlugs(slugs);
+      })
+      .catch(() => {});
+  }, [userSlug]);
+
   const myPlayerSlugs = useMemo(() => {
     if (!game) return new Set<string>();
+    // If lineup data loaded, only highlight players in active lineups
+    if (lineupPlayerSlugs) {
+      return new Set(
+        game.playerGameScores
+          .filter((ps) => lineupPlayerSlugs.has(ps.anyPlayer.slug))
+          .map((ps) => ps.anyPlayer.slug),
+      );
+    }
+    // Fallback: highlight by owned cards' clubs
     const myCodes = new Set(
       cards
         .map((c) => c.anyPlayer?.activeClub?.code)
@@ -37,14 +68,19 @@ export function MatchRoom({ gameId, cards }: Props) {
         .filter((ps) => myCodes.has(ps.anyPlayer.activeClub?.code ?? ""))
         .map((ps) => ps.anyPlayer.slug),
     );
-  }, [game, cards]);
+  }, [game, cards, lineupPlayerSlugs]);
 
   const myCards = useMemo(() => {
     if (!game) return [];
-    const slugs = new Set(game.playerGameScores.map((ps) => ps.anyPlayer.slug));
-    const matching = cards.filter(
-      (c) => c.anyPlayer?.slug && slugs.has(c.anyPlayer.slug) && NON_COMMON_RARITIES.has(c.rarityTyped),
-    );
+    const gameSlugs = new Set(game.playerGameScores.map((ps) => ps.anyPlayer.slug));
+    const matching = cards.filter((c) => {
+      const playerSlug = c.anyPlayer?.slug;
+      if (!playerSlug || !gameSlugs.has(playerSlug)) return false;
+      if (!NON_COMMON_RARITIES.has(c.rarityTyped)) return false;
+      // If lineup data loaded, only show cards for players in active lineups
+      if (lineupPlayerSlugs && !lineupPlayerSlugs.has(playerSlug)) return false;
+      return true;
+    });
     // Deduplicate: keep only the best rarity card per player
     const bestByPlayer = new Map<string, SorareCard>();
     for (const card of matching) {
@@ -55,7 +91,7 @@ export function MatchRoom({ gameId, cards }: Props) {
       }
     }
     return Array.from(bestByPlayer.values());
-  }, [game, cards]);
+  }, [game, cards, lineupPlayerSlugs]);
 
   if (isLoading) {
     return (
@@ -114,7 +150,7 @@ export function MatchRoom({ gameId, cards }: Props) {
               {myCards.length > 0 && (
                 <div className="px-4 py-3 border-t border-zinc-800">
                   <h3 className="text-[10px] font-semibold text-zinc-500 mb-2 uppercase tracking-wider">
-                    Your players
+                    Your Players
                   </h3>
                   <MyPlayersStrip cards={myCards} scores={game.playerGameScores} />
                 </div>
@@ -134,8 +170,25 @@ export function MatchRoom({ gameId, cards }: Props) {
         </div>
       </div>
 
-      {/* Right panel — managers + feed + chat bubble */}
+      {/* Right panel — watching + feed + chat bubble */}
       <div className="w-[40%] flex flex-col overflow-hidden relative">
+        {/* Watching indicator */}
+        <div className="px-3 py-2.5 border-b border-zinc-800 shrink-0 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold">Watching</span>
+            <div className="flex -space-x-1.5">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-zinc-900">
+                {userSlug.slice(0, 2).toUpperCase()}
+              </div>
+            </div>
+            <span className="text-[11px] text-zinc-400 font-medium">{userSlug.replace(/-/g, " ")}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-[10px] text-green-500/70 font-medium">Live</span>
+          </div>
+        </div>
+
         {/* Events feed */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="px-3 py-1.5 border-b border-zinc-800 shrink-0">

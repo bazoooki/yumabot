@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useEffect, useRef } from "react";
-import { Volume2, VolumeX, BarChart3 } from "lucide-react";
+import { useMemo, useEffect, useRef, useState } from "react";
+import { MessageCircle, X } from "lucide-react";
 import { useMarketStore } from "@/lib/market/market-store";
 import { buildPortfolioIndex, lookupOwned } from "@/lib/market/portfolio-utils";
 import { ConnectionStatus } from "./connection-status";
 import { OfferFeed } from "./offer-feed";
 import { AlertPanel } from "./alert-panel";
+import { MarketChat } from "./market-chat";
 import { CommandBar } from "@/components/command-bar/command-bar";
 import { cn } from "@/lib/utils";
 import type { SorareCard } from "@/lib/types";
@@ -22,15 +23,12 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-export function LiveMarketTab({ cards }: { cards: SorareCard[] }) {
+export function LiveMarketTab({ cards, userSlug }: { cards: SorareCard[]; userSlug: string }) {
   const {
-    soundEnabled,
-    toggleSound,
     players,
     addAlert,
-    advancedAnalytics,
-    toggleAdvancedAnalytics,
   } = useMarketStore();
+  const [chatOpen, setChatOpen] = useState(false);
   const portfolio = useMemo(() => buildPortfolioIndex(cards), [cards]);
 
   // --- Portfolio alerts ---
@@ -145,38 +143,31 @@ export function LiveMarketTab({ cards }: { cards: SorareCard[] }) {
           <OfferFeed portfolio={portfolio} />
         </div>
 
-        <div className="w-[40%] overflow-hidden">
+        <div className="w-[40%] overflow-hidden relative">
           <AlertPanel />
-        </div>
 
-        {/* Bottom-right control buttons */}
-        <div className="absolute bottom-4 right-4 flex items-center gap-2 z-10">
+          {/* Chat bubble */}
           <button
-            onClick={toggleAdvancedAnalytics}
+            onClick={() => setChatOpen(!chatOpen)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200",
-              advancedAnalytics
-                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                : "bg-secondary/50 text-muted-foreground border border-border/50 hover:bg-secondary hover:text-foreground"
+              "absolute bottom-4 right-4 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all z-20",
+              chatOpen
+                ? "bg-zinc-700 text-white"
+                : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20",
             )}
-            title={advancedAnalytics ? "Disable advanced analytics" : "Enable advanced analytics"}
           >
-            <BarChart3 className="w-3.5 h-3.5" />
-            Advanced
+            {chatOpen ? <X className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
           </button>
 
-          <button
-            onClick={toggleSound}
-            className={cn(
-              "p-2 rounded-xl transition-all duration-200",
-              soundEnabled
-                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                : "bg-secondary/50 text-muted-foreground border border-border/50 hover:bg-secondary hover:text-foreground"
-            )}
-            title={soundEnabled ? "Mute alerts" : "Enable alert sound"}
-          >
-            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-          </button>
+          {/* Chat overlay */}
+          {chatOpen && (
+            <div className="absolute bottom-16 right-4 left-4 h-[280px] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl shadow-black/50 z-20 flex flex-col overflow-hidden">
+              <div className="px-3 py-2 border-b border-zinc-800 shrink-0 flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-zinc-300">Chat</h3>
+              </div>
+              <MarketChat userSlug={userSlug} />
+            </div>
+          )}
         </div>
       </div>
     </div>

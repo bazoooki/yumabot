@@ -202,31 +202,6 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
           </button>
         ))}
 
-        <div className="w-px h-5 bg-border/50" />
-
-        {/* Min sales stepper */}
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground">Min</span>
-          <div className="flex items-center rounded-lg bg-secondary/30 border border-border/50">
-            <button
-              onClick={() => setFilters({ minSales: Math.max(1, filters.minSales - 1) })}
-              className="px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              -
-            </button>
-            <span className="px-1.5 py-0.5 text-xs font-bold text-foreground tabular-nums min-w-[20px] text-center">
-              {filters.minSales}
-            </span>
-            <button
-              onClick={() => setFilters({ minSales: filters.minSales + 1 })}
-              className="px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              +
-            </button>
-          </div>
-          <span className="text-xs text-muted-foreground">sales</span>
-        </div>
-
         <span className="ml-auto text-xs text-muted-foreground">
           {sorted.length} players &middot; {totalOffers} sales
         </span>

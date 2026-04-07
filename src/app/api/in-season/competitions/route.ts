@@ -92,17 +92,19 @@ function sortCompetitions(competitions: InSeasonCompetition[]) {
 
 // --- LIVE: fetch existing lineups via userFixtureResults ---
 
-function parseLive(result: any): InSeasonCompetition[] {
+function parseLive(result: any, seasonalityFilter?: string): InSeasonCompetition[] {
   const contenders =
     result?.so5?.so5Fixture?.userFixtureResults?.so5LeaderboardContenders?.nodes ?? [];
 
-  const inSeason = contenders.filter(
-    (c: any) => c.so5Leaderboard?.seasonality === "IN_SEASON",
-  );
+  const filtered = seasonalityFilter === "all"
+    ? contenders
+    : contenders.filter(
+        (c: any) => c.so5Leaderboard?.seasonality === (seasonalityFilter || "IN_SEASON"),
+      );
 
   // Group by leaderboard (multiple contenders = multiple teams)
   const byLeaderboard = new Map<string, any[]>();
-  for (const c of inSeason) {
+  for (const c of filtered) {
     const slug = c.so5Leaderboard?.slug;
     if (!slug) continue;
     const arr = byLeaderboard.get(slug) ?? [];
@@ -216,6 +218,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userSlug = searchParams.get("userSlug");
   const fixtureType = searchParams.get("type") || "UPCOMING";
+  const seasonality = searchParams.get("seasonality") || undefined;
 
   if (!userSlug && fixtureType === "LIVE") {
     return NextResponse.json(
@@ -241,7 +244,7 @@ export async function GET(request: Request) {
     }
 
     const competitions =
-      fixtureType === "LIVE" ? parseLive(result) : parseUpcoming(result);
+      fixtureType === "LIVE" ? parseLive(result, seasonality) : parseUpcoming(result);
 
     return NextResponse.json({
       fixtureSlug: fixture.slug,

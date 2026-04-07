@@ -9,9 +9,10 @@ import { MatchRoom } from "./match-room";
 
 interface Props {
   cards: SorareCard[];
+  userSlug: string;
 }
 
-export function LiveGamesTab({ cards }: Props) {
+export function LiveGamesTab({ cards, userSlug }: Props) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const selectedGameId = searchParams.get("game");
@@ -54,7 +55,7 @@ export function LiveGamesTab({ cards }: Props) {
 
       {/* Content */}
       {selectedGameId ? (
-        <MatchRoom gameId={selectedGameId} cards={cards} />
+        <MatchRoom gameId={selectedGameId} cards={cards} userSlug={userSlug} />
       ) : (
         <GamesList
           cards={cards}
