@@ -22,7 +22,7 @@ export function LiveTracker() {
         const success = actualTotal >= targetScore;
         new Notification("Hot Streak Update", {
           body: success
-            ? `Level ${currentLevel} cleared! ${actualTotal} pts. Submit next lineup!`
+            ? `${targetScore} cleared! ${actualTotal} pts. Submit next lineup!`
             : `Missed by ${targetScore - actualTotal} pts. Streak resets.`,
         });
       }
@@ -81,7 +81,7 @@ export function LiveTracker() {
           {actualTotal >= targetScore ? (
             <>
               <Trophy className="w-8 h-8 text-green-400 mx-auto" />
-              <p className="text-sm font-bold text-green-400">LEVEL {currentLevel} CLEARED!</p>
+              <p className="text-sm font-bold text-green-400">{targetScore} CLEARED!</p>
               <p className="text-xs text-zinc-400">
                 {actualTotal} pts — Earned {streakLevel?.reward}. Submit your next lineup now!
               </p>

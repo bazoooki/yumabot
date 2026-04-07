@@ -1,28 +1,21 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { Header } from "@/components/header";
 import { UserPicker } from "@/components/user-picker";
-import {
-  SidebarFilters,
-  applyFilters,
-} from "@/components/sidebar-filters";
-import { CardGrid, CardGridSkeleton } from "@/components/card-grid";
 import { LineupBuilder } from "@/components/lineup-builder/lineup-builder";
-import { StrategyDashboard } from "@/components/strategy-dashboard";
 import { HomeDashboard } from "@/components/home-dashboard";
 import { LiveMarketTab } from "@/components/live-market/live-market-tab";
-import { RoomsList } from "@/components/rooms/rooms-list";
-import { RoomView } from "@/components/rooms/room-view";
 import { LiveGamesTab } from "@/components/live-games/live-games-tab";
 import { InSeasonTab } from "@/components/in-season/in-season-tab";
-import { useFilterStore } from "@/lib/store";
+import { useMarketStream } from "@/lib/market/use-market-stream";
 import type { CardsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "home" | "lineup" | "strategy" | "gallery" | "market" | "live-games" | "rooms" | "in-season";
+type Tab = "home" | "lineup" | "market" | "live-games" | "in-season";
 
 interface CardsApiResponse extends CardsResponse {
   cached?: boolean;
@@ -48,28 +41,43 @@ async function fetchCards(slug: string, refresh = false, retries = 2): Promise<C
   return res.json();
 }
 
-const TABS: { key: Tab; label: string; borderColor?: string }[] = [
+const TABS: { key: Tab; label: string; borderColor?: string; badge?: string }[] = [
   { key: "home", label: "Home" },
   { key: "lineup", label: "Lineup Builder" },
-  { key: "strategy", label: "Strategy", borderColor: "border-purple-400" },
-  { key: "gallery", label: "Gallery" },
   { key: "market", label: "Live Market", borderColor: "border-green-400" },
   { key: "live-games", label: "Live Games", borderColor: "border-cyan-400" },
-  { key: "rooms", label: "Rooms", borderColor: "border-cyan-400" },
-  { key: "in-season", label: "In Season", borderColor: "border-amber-400" },
+  { key: "in-season", label: "In Season", borderColor: "border-amber-400", badge: "beta" },
 ];
 
-export default function GalleryPage() {
+export default function GalleryPageWrapper() {
+  return (
+    <Suspense>
+      <GalleryPage />
+    </Suspense>
+  );
+}
+
+function GalleryPage() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [userSlug, setUserSlug] = useState<string | null>(null);
-  const { filters } = useFilterStore();
   const queryClient = useQueryClient();
+
+  // Keep market stream connected regardless of active tab
+  useMarketStream();
+
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     setUserSlug(getStoredSlug());
   }, []);
+
+  // Auto-switch to live-games tab when ?game= param is present
+  useEffect(() => {
+    if (searchParams.get("game")) {
+      setActiveTab("live-games");
+    }
+  }, [searchParams]);
 
   const handleUserSelect = (slug: string) => {
     localStorage.setItem("yumabot-user-slug", slug);
@@ -102,10 +110,6 @@ export default function GalleryPage() {
   };
 
   const allCards = data?.cards || [];
-  const filteredCards = useMemo(
-    () => applyFilters(allCards, filters),
-    [allCards, filters]
-  );
 
   if (!userSlug) {
     return <UserPicker onSelect={handleUserSelect} />;
@@ -129,13 +133,18 @@ export default function GalleryPage() {
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "py-3 text-sm font-medium transition-colors",
+                "py-3 text-sm font-medium transition-colors flex items-center gap-1.5",
                 activeTab === tab.key
                   ? `text-white border-b-2 ${tab.borderColor || "border-white"}`
                   : "text-zinc-500 hover:text-zinc-300"
               )}
             >
               {tab.label}
+              {tab.badge && (
+                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 leading-none">
+                  {tab.badge}
+                </span>
+              )}
             </button>
           ))}
 
@@ -164,28 +173,7 @@ export default function GalleryPage() {
       </div>
 
       {/* Main Content */}
-      {activeTab === "gallery" ? (
-        <div className="flex flex-1 overflow-hidden">
-          <SidebarFilters
-            cards={allCards}
-            filteredCount={filteredCards.length}
-          />
-          <main className="flex-1 overflow-y-auto p-4">
-            {error ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="text-center space-y-3 max-w-md">
-                  <p className="text-lg font-medium text-red-400">Error loading cards</p>
-                  <p className="text-sm text-zinc-500">{error instanceof Error ? error.message : "Unknown error"}</p>
-                </div>
-              </div>
-            ) : isLoading ? (
-              <CardGridSkeleton />
-            ) : (
-              <CardGrid cards={filteredCards} isLoading={false} />
-            )}
-          </main>
-        </div>
-      ) : error ? (
+      {error ? (
         <div className="flex items-center justify-center py-20">
           <div className="text-center space-y-3 max-w-md">
             <p className="text-lg font-medium text-red-400">Error loading cards</p>
@@ -199,32 +187,20 @@ export default function GalleryPage() {
             <p className="text-sm text-zinc-500">Loading cards...</p>
           </div>
         </div>
-      ) : activeTab === "rooms" ? (
-        activeRoomId ? (
-          <RoomView
-            roomId={activeRoomId}
-            userSlug={userSlug}
-            cards={allCards}
-            onBack={() => setActiveRoomId(null)}
-          />
-        ) : (
-          <RoomsList
-            userSlug={userSlug}
-            onEnterRoom={(id) => setActiveRoomId(id)}
-          />
-        )
-      ) : activeTab === "market" ? (
-        <LiveMarketTab cards={allCards} />
-      ) : activeTab === "live-games" ? (
-        <LiveGamesTab cards={allCards} />
-      ) : activeTab === "home" ? (
-        <HomeDashboard cards={allCards} onNavigate={setActiveTab} />
-      ) : activeTab === "lineup" ? (
-        <LineupBuilder cards={allCards} />
-      ) : activeTab === "in-season" ? (
-        <InSeasonTab cards={allCards} userSlug={userSlug} />
       ) : (
-        <StrategyDashboard cards={allCards} />
+        <>
+          {activeTab === "home" && <HomeDashboard cards={allCards} onNavigate={setActiveTab} />}
+          {activeTab === "lineup" && <LineupBuilder cards={allCards} />}
+          {activeTab === "in-season" && <InSeasonTab cards={allCards} userSlug={userSlug} />}
+
+          {/* Keep market & live-games always mounted so streams persist */}
+          <div className={activeTab === "market" ? "flex flex-1 overflow-hidden" : "hidden"}>
+            <LiveMarketTab cards={allCards} />
+          </div>
+          <div className={activeTab === "live-games" ? "flex flex-1 overflow-hidden" : "hidden"}>
+            <LiveGamesTab cards={allCards} />
+          </div>
+        </>
       )}
     </div>
   );

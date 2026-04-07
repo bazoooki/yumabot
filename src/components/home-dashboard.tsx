@@ -14,7 +14,7 @@ import { formatKickoffTime, getKickoffUrgency, groupByKickoffWindow, getMergeWin
 
 interface HomeDashboardProps {
   cards: SorareCard[];
-  onNavigate: (tab: "lineup" | "strategy" | "gallery") => void;
+  onNavigate: (tab: "lineup") => void;
 }
 
 export function HomeDashboard({ cards, onNavigate }: HomeDashboardProps) {
@@ -133,7 +133,7 @@ export function HomeDashboard({ cards, onNavigate }: HomeDashboardProps) {
         )}
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <button
             onClick={() => onNavigate("lineup")}
             className="group p-5 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-purple-500/30 transition-all text-left"
@@ -144,26 +144,6 @@ export function HomeDashboard({ cards, onNavigate }: HomeDashboardProps) {
               {hasLineup ? `${filledCount}/5 players set` : "Pick your 5 players"}
             </p>
             <ChevronRight className="w-4 h-4 text-zinc-600 mt-3 group-hover:text-purple-400 transition-colors" />
-          </button>
-
-          <button
-            onClick={() => onNavigate("strategy")}
-            className="group p-5 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-purple-500/30 transition-all text-left"
-          >
-            <BarChart3 className="w-6 h-6 text-blue-400 mb-3" />
-            <p className="text-sm font-bold text-white">Strategy</p>
-            <p className="text-[11px] text-zinc-500 mt-1">Game batches, power rankings, EV analysis</p>
-            <ChevronRight className="w-4 h-4 text-zinc-600 mt-3 group-hover:text-blue-400 transition-colors" />
-          </button>
-
-          <button
-            onClick={() => onNavigate("gallery")}
-            className="group p-5 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-zinc-700 transition-all text-left"
-          >
-            <Users className="w-6 h-6 text-zinc-400 mb-3" />
-            <p className="text-sm font-bold text-white">Gallery</p>
-            <p className="text-[11px] text-zinc-500 mt-1">{stats.totalCards} cards in your collection</p>
-            <ChevronRight className="w-4 h-4 text-zinc-600 mt-3 group-hover:text-zinc-400 transition-colors" />
           </button>
         </div>
 

@@ -121,7 +121,7 @@ function ScoreHeader({
                 key={lvl.level}
                 onClick={() => setCurrentLevel(lvl.level)}
                 className={cn(
-                  "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all",
+                  "px-2 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all",
                   isActive
                     ? isFinal
                       ? "bg-amber-500 border-amber-400 text-black shadow-md shadow-amber-500/30"
@@ -131,7 +131,7 @@ function ScoreHeader({
                       : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-500",
                 )}
               >
-                {lvl.level}
+                {lvl.threshold}
               </button>
             );
           })}

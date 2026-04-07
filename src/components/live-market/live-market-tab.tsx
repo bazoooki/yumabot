@@ -2,7 +2,6 @@
 
 import { useMemo, useEffect, useRef } from "react";
 import { Volume2, VolumeX, BarChart3 } from "lucide-react";
-import { useMarketStream } from "@/lib/market/use-market-stream";
 import { useMarketStore } from "@/lib/market/market-store";
 import { buildPortfolioIndex, lookupOwned } from "@/lib/market/portfolio-utils";
 import { ConnectionStatus } from "./connection-status";
@@ -24,8 +23,6 @@ function daysUntil(dateStr: string): number {
 }
 
 export function LiveMarketTab({ cards }: { cards: SorareCard[] }) {
-  useMarketStream();
-
   const {
     soundEnabled,
     toggleSound,

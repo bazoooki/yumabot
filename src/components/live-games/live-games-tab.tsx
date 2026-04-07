@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Tv, ChevronLeft } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { SorareCard } from "@/lib/types";
 import { GamesList } from "./games-list";
 import { MatchRoom } from "./match-room";
@@ -12,7 +12,22 @@ interface Props {
 }
 
 export function LiveGamesTab({ cards }: Props) {
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const selectedGameId = searchParams.get("game");
+
+  const selectGame = useCallback((id: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("game", id);
+    router.push(`?${params.toString()}`);
+  }, [searchParams, router]);
+
+  const clearGame = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("game");
+    const qs = params.toString();
+    router.push(qs ? `?${qs}` : "/");
+  }, [searchParams, router]);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -23,7 +38,7 @@ export function LiveGamesTab({ cards }: Props) {
       <div className="px-6 py-3 border-b border-zinc-800 flex items-center gap-3 shrink-0">
         {selectedGameId ? (
           <button
-            onClick={() => setSelectedGameId(null)}
+            onClick={clearGame}
             className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -43,7 +58,7 @@ export function LiveGamesTab({ cards }: Props) {
       ) : (
         <GamesList
           cards={cards}
-          onSelectGame={(id) => setSelectedGameId(id)}
+          onSelectGame={selectGame}
         />
       )}
     </div>

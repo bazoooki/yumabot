@@ -35,7 +35,7 @@ export function GameBoard() {
             >
               <div
                 className={cn(
-                  "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all",
+                  "px-2 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all",
                   isActive
                     ? "bg-purple-500 border-purple-400 text-white shadow-md shadow-purple-500/30"
                     : isPast
@@ -44,14 +44,8 @@ export function GameBoard() {
                   isFinal && isActive && "bg-amber-500 border-amber-400 shadow-amber-500/30"
                 )}
               >
-                {lvl.level}
-              </div>
-              <span className={cn(
-                "text-[10px] font-semibold",
-                isActive ? "text-white" : "text-zinc-600"
-              )}>
                 {lvl.threshold}
-              </span>
+              </div>
               <span className={cn(
                 "text-[9px] font-medium",
                 isActive ? (isFinal ? "text-amber-400" : "text-green-400") : "text-zinc-700"

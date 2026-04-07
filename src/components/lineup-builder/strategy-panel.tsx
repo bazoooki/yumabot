@@ -238,7 +238,7 @@ export function StrategyPanel({ cards }: StrategyPanelProps) {
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-green-400" />
-          <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Level {currentLevel}</h3>
+          <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">{streakLevel?.threshold ?? currentLevel} pts</h3>
         </div>
 
         <div className="bg-zinc-800/50 rounded-lg p-3 space-y-2.5">
