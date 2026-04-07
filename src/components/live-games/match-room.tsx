@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { SorareCard, GameDetail, GamePlayerScore, GameEvent } from "@/lib/types";
 
 const NON_COMMON_RARITIES = new Set(["limited", "rare", "super_rare", "unique", "custom_series"]);
+const RARITY_RANK: Record<string, number> = { unique: 5, super_rare: 4, rare: 3, limited: 2, custom_series: 1 };
 
 interface Props {
   gameId: string;
@@ -41,9 +42,19 @@ export function MatchRoom({ gameId, cards }: Props) {
   const myCards = useMemo(() => {
     if (!game) return [];
     const slugs = new Set(game.playerGameScores.map((ps) => ps.anyPlayer.slug));
-    return cards.filter(
+    const matching = cards.filter(
       (c) => c.anyPlayer?.slug && slugs.has(c.anyPlayer.slug) && NON_COMMON_RARITIES.has(c.rarityTyped),
     );
+    // Deduplicate: keep only the best rarity card per player
+    const bestByPlayer = new Map<string, SorareCard>();
+    for (const card of matching) {
+      const playerSlug = card.anyPlayer!.slug;
+      const existing = bestByPlayer.get(playerSlug);
+      if (!existing || (RARITY_RANK[card.rarityTyped] ?? 0) > (RARITY_RANK[existing.rarityTyped] ?? 0)) {
+        bestByPlayer.set(playerSlug, card);
+      }
+    }
+    return Array.from(bestByPlayer.values());
   }, [game, cards]);
 
   if (isLoading) {
@@ -1022,42 +1033,55 @@ function MyPlayersStrip({
 }) {
   const scoreMap = new Map(scores.map((s) => [s.anyPlayer.slug, s]));
 
+  // Sort: playing first, then by score descending, DNP last
+  const sorted = [...cards].sort((a, b) => {
+    const psA = scoreMap.get(a.anyPlayer?.slug ?? "");
+    const psB = scoreMap.get(b.anyPlayer?.slug ?? "");
+    const dnpA = !psA || psA.anyPlayerGameStats?.minsPlayed === 0;
+    const dnpB = !psB || psB.anyPlayerGameStats?.minsPlayed === 0;
+    if (dnpA !== dnpB) return dnpA ? 1 : -1;
+    return (psB?.score ?? 0) - (psA?.score ?? 0);
+  });
+
   return (
-    <div className="flex justify-center gap-3 flex-wrap">
-      {cards.map((card) => {
+    <div className="flex gap-2 overflow-x-auto pb-1">
+      {sorted.map((card) => {
         const ps = scoreMap.get(card.anyPlayer?.slug ?? "");
         const isDNP = !ps || ps.anyPlayerGameStats?.minsPlayed === 0;
         const isPlaying = ps?.scoreStatus === "PLAYING";
+        const score = Math.round(ps?.score ?? 0);
+        const name = card.anyPlayer?.displayName?.split(" ").pop() ?? "";
 
         return (
-          <div key={card.slug} className="relative w-14 text-center">
-            <div
-              className={cn(
-                "w-14 h-14 rounded-xl overflow-hidden border-2",
-                isPlaying
-                  ? "border-green-500/50"
-                  : isDNP
-                    ? "border-zinc-700 opacity-50"
-                    : "border-zinc-700",
-              )}
-            >
+          <div
+            key={card.slug}
+            className={cn(
+              "flex items-center gap-2 px-2 py-1.5 rounded-lg border shrink-0 transition-all",
+              isPlaying
+                ? "bg-green-500/5 border-green-500/30"
+                : isDNP
+                  ? "bg-zinc-900/50 border-zinc-800 opacity-50"
+                  : "bg-zinc-900/50 border-zinc-800",
+            )}
+          >
+            <div className="relative">
               <img
                 src={card.pictureUrl}
-                alt={card.anyPlayer?.displayName ?? ""}
-                className="w-full h-full object-cover object-[center_18%]"
+                alt={name}
+                className="w-9 h-9 rounded-lg object-cover object-[center_18%]"
               />
-            </div>
-            <div
-              className={cn(
-                "absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded-md",
-                isDNP
-                  ? "bg-zinc-800 text-zinc-500"
-                  : isPlaying
-                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                    : "bg-zinc-800 text-white border border-zinc-700",
+              {isPlaying && (
+                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               )}
-            >
-              {isDNP ? "DNP" : Math.round(ps?.score ?? 0)}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-white truncate max-w-[80px]">{name}</p>
+              <p className={cn(
+                "text-[11px] font-bold",
+                isDNP ? "text-zinc-600" : score >= 50 ? "text-green-400" : score >= 30 ? "text-white" : "text-zinc-400",
+              )}>
+                {isDNP ? "DNP" : `${score} pts`}
+              </p>
             </div>
           </div>
         );
