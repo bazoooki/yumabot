@@ -7,44 +7,7 @@ import { extractGoalScorers, getStatLabel } from "@/lib/game-events";
 import { cn } from "@/lib/utils";
 import type { SorareCard, GameDetail, GamePlayerScore, GameEvent } from "@/lib/types";
 
-function generateMockEvents(): GameEvent[] {
-  const now = Date.now();
-  const mk = (
-    slug: string, name: string, team: string, stat: string, cat: GameEvent["category"],
-    delta: number, val: number, total: number, min: number,
-    extra?: Partial<GameEvent>,
-  ): Omit<GameEvent, "timestamp"> => ({
-    playerSlug: slug, playerName: name, teamCode: team, stat, category: cat,
-    pointsDelta: delta, newValue: val, playerTotalScore: total, minute: min, ...extra,
-  });
-
-  return ([
-    mk("m1", "R. Brito", "CSP", "goal", "decisive", 12, 1, 78, 78, { isOwned: true }),
-    mk("m1", "R. Brito", "CSP", "big_chance_created", "all_around", 3, 2, 78, 78, { isOwned: true }),
-    mk("m2", "N. Otamendi", "SLB", "won_tackle", "all_around", 3, 6, 59, 75),
-    mk("m2", "N. Otamendi", "SLB", "near_double_double", "all_around", 0, 0, 59, 75),
-    mk("m3", "A. Silva", "SLB", "substitution", "all_around", 0, 0, 53, 72, { subPlayerIn: "A. Silva", subPlayerOut: "D. Lukébakio" }),
-    mk("m7", "J. Livolant", "CSP", "injury_sub", "negative", 0, 0, 30, 70, { subPlayerIn: "G. Larrazabal", subPlayerOut: "J. Livolant", isInjury: true }),
-    mk("m5", "A. Bah", "SLB", "assist", "decisive", 8, 1, 51, 68, { isOwned: true }),
-    mk("m4", "P. Sequeira", "CSP", "save", "all_around", 2, 3, 41, 65),
-    mk("m6", "S. Dahl", "SLB", "goal_conceded", "negative", -2, 1, 36, 62),
-    mk("m2", "N. Otamendi", "SLB", "double_double", "all_around", 4, 1, 55, 60),
-    mk("m3", "A. Silva", "SLB", "yellow_card", "negative", -2, 1, 50, 52),
-    mk("m6", "S. Dahl", "SLB", "won_contest", "all_around", 1.5, 3, 38, 48),
-    mk("m4", "P. Sequeira", "CSP", "saved_ibox", "all_around", 2, 2, 39, 44),
-    mk("m2", "N. Otamendi", "SLB", "triple_double", "all_around", 6, 1, 61, 40),
-    mk("m1", "R. Brito", "CSP", "ontarget_scoring_att", "all_around", 3, 3, 54, 30, { isOwned: true }),
-    mk("m5", "A. Bah", "SLB", "interception", "all_around", 3, 4, 43, 25, { isOwned: true }),
-  ] as Omit<GameEvent, "timestamp">[]).map((ev, i) => ({ ...ev, timestamp: now - i * 30000 }));
-}
-
-const MOCK_MANAGERS = [
-  { slug: "ba-zii", name: "Ba Zii", initials: "BZ", isYou: true },
-  { slug: "crypto-fc", name: "CryptoFC", initials: "CF", isYou: false },
-  { slug: "el-maestro", name: "El Maestro", initials: "EM", isYou: false },
-  { slug: "yuma-king", name: "YumaKing", initials: "YK", isYou: false },
-  { slug: "sorare-pro", name: "SorarePro", initials: "SP", isYou: false },
-];
+const NON_COMMON_RARITIES = new Set(["limited", "rare", "super_rare", "unique", "custom_series"]);
 
 interface Props {
   gameId: string;
@@ -57,12 +20,9 @@ export function MatchRoom({ gameId, cards }: Props) {
   const [activeTab, setActiveTab] = useState<"lineups" | "stats" | "players">(
     "lineups",
   );
-  const [mockEvents, setMockEvents] = useState<GameEvent[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
   const feedVariant = 8;
-  const events = [...mockEvents, ...liveEvents];
-
-  const seedMockEvents = () => setMockEvents(generateMockEvents());
+  const events = liveEvents;
 
   const myPlayerSlugs = useMemo(() => {
     if (!game) return new Set<string>();
@@ -82,7 +42,7 @@ export function MatchRoom({ gameId, cards }: Props) {
     if (!game) return [];
     const slugs = new Set(game.playerGameScores.map((ps) => ps.anyPlayer.slug));
     return cards.filter(
-      (c) => c.anyPlayer?.slug && slugs.has(c.anyPlayer.slug),
+      (c) => c.anyPlayer?.slug && slugs.has(c.anyPlayer.slug) && NON_COMMON_RARITIES.has(c.rarityTyped),
     );
   }, [game, cards]);
 
@@ -165,21 +125,12 @@ export function MatchRoom({ gameId, cards }: Props) {
 
       {/* Right panel — managers + feed + chat bubble */}
       <div className="w-[40%] flex flex-col overflow-hidden relative">
-        {/* Managers strip */}
-        <ManagersStrip />
-
         {/* Events feed */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-3 py-1.5 border-b border-zinc-800 shrink-0 flex items-center justify-between">
+          <div className="px-3 py-1.5 border-b border-zinc-800 shrink-0">
             <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
               Live Feed
             </h3>
-            <button
-              onClick={seedMockEvents}
-              className="text-[9px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 transition-colors"
-            >
-              Mock
-            </button>
           </div>
           <EventsFeed events={events} variant={feedVariant} game={game} />
         </div>
@@ -629,42 +580,6 @@ function PlayersList({
   );
 }
 
-// ─── Managers Strip ───
-
-function ManagersStrip() {
-  return (
-    <div className="px-3 py-2.5 border-b border-zinc-800 shrink-0">
-      <div className="flex items-center gap-2 overflow-x-auto">
-        {MOCK_MANAGERS.map((m) => (
-          <div
-            key={m.slug}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-xl shrink-0 transition-colors",
-              m.isYou
-                ? "bg-primary/10 border border-primary/20"
-                : "bg-zinc-800/50 border border-zinc-800 hover:border-zinc-700",
-            )}
-          >
-            <div
-              className={cn(
-                "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
-                m.isYou ? "bg-primary text-primary-foreground" : "bg-zinc-700 text-zinc-300",
-              )}
-            >
-              {m.initials}
-            </div>
-            <div className="min-w-0">
-              <p className={cn("text-[11px] font-semibold truncate", m.isYou ? "text-primary" : "text-zinc-300")}>
-                {m.name}
-              </p>
-              {m.isYou && <p className="text-[9px] text-primary/60">You</p>}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ─── Goal Scorers Line ───
 
