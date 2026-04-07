@@ -1,9 +1,10 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Header } from "@/components/header";
+import { UserPicker } from "@/components/user-picker";
 import {
   SidebarFilters,
   applyFilters,
@@ -28,10 +29,9 @@ interface CardsApiResponse extends CardsResponse {
   cachedAt?: string;
 }
 
-async function fetchSettings(): Promise<{ userSlug: string }> {
-  const res = await fetch("/api/settings");
-  if (!res.ok) return { userSlug: "ba-zii" };
-  return res.json();
+function getStoredSlug(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("yumabot-user-slug");
 }
 
 async function fetchCards(slug: string, refresh = false, retries = 2): Promise<CardsApiResponse> {
@@ -63,16 +63,18 @@ export default function GalleryPage() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [userSlug, setUserSlug] = useState<string | null>(null);
   const { filters } = useFilterStore();
   const queryClient = useQueryClient();
 
-  const { data: settings } = useQuery({
-    queryKey: ["settings"],
-    queryFn: fetchSettings,
-    staleTime: Infinity,
-  });
+  useEffect(() => {
+    setUserSlug(getStoredSlug());
+  }, []);
 
-  const userSlug = settings?.userSlug || "ba-zii";
+  const handleUserSelect = (slug: string) => {
+    localStorage.setItem("yumabot-user-slug", slug);
+    setUserSlug(slug);
+  };
 
   const {
     data,
@@ -80,7 +82,7 @@ export default function GalleryPage() {
     error,
   } = useQuery({
     queryKey: ["cards", userSlug],
-    queryFn: () => fetchCards(userSlug),
+    queryFn: () => fetchCards(userSlug!),
     enabled: !!userSlug,
     staleTime: 6 * 60 * 60 * 1000, // 6 hours
   });
@@ -91,7 +93,7 @@ export default function GalleryPage() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const fresh = await fetchCards(userSlug, true);
+      const fresh = await fetchCards(userSlug!, true);
       queryClient.setQueryData(["cards", userSlug], fresh);
     } catch (e) {
       console.error("Refresh failed:", e);
@@ -105,17 +107,16 @@ export default function GalleryPage() {
     [allCards, filters]
   );
 
+  if (!userSlug) {
+    return <UserPicker onSelect={handleUserSelect} />;
+  }
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <Header
         userSlug={userSlug}
         onUserChange={async (newSlug: string) => {
-          await fetch("/api/settings", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userSlug: newSlug }),
-          });
-          queryClient.invalidateQueries({ queryKey: ["settings"] });
+          handleUserSelect(newSlug);
           queryClient.invalidateQueries({ queryKey: ["cards"] });
         }}
       />
