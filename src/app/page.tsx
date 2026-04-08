@@ -11,11 +11,12 @@ import { LiveMarketTab } from "@/components/live-market/live-market-tab";
 import { LiveGamesTab } from "@/components/live-games/live-games-tab";
 import { InSeasonTab } from "@/components/in-season/in-season-tab";
 import { ClanTab } from "@/components/clan/clan-tab";
+import { LiveLineupsTab } from "@/components/live-lineups/live-lineups-tab";
 import { useMarketStream } from "@/lib/market/use-market-stream";
 import type { CardsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "home" | "lineup" | "market" | "live-games" | "in-season" | "clan";
+type Tab = "home" | "lineup" | "market" | "live-games" | "live-lineups" | "in-season" | "clan";
 
 interface CardsApiResponse extends CardsResponse {
   cached?: boolean;
@@ -46,6 +47,7 @@ const TABS: { key: Tab; label: string; borderColor?: string; badge?: string }[] 
   { key: "lineup", label: "Lineup Builder" },
   { key: "market", label: "Live Market", borderColor: "border-green-400" },
   { key: "live-games", label: "Live Games", borderColor: "border-cyan-400" },
+  { key: "live-lineups", label: "Live Lineups", borderColor: "border-pink-400" },
   { key: "in-season", label: "In Season", borderColor: "border-amber-400", badge: "beta" },
   { key: "clan", label: "My Clan", borderColor: "border-violet-400", badge: "beta" },
 ];
@@ -183,8 +185,9 @@ function GalleryPage() {
         </div>
       ) : (
         <>
-          {activeTab === "home" && <HomeDashboard cards={allCards} onNavigate={setActiveTab} />}
+          {activeTab === "home" && <HomeDashboard cards={allCards} onNavigate={setActiveTab} userSlug={userSlug} />}
           {activeTab === "lineup" && <LineupBuilder cards={allCards} />}
+          {activeTab === "live-lineups" && <LiveLineupsTab cards={allCards} userSlug={userSlug} />}
           {activeTab === "in-season" && <InSeasonTab cards={allCards} userSlug={userSlug} />}
           {activeTab === "clan" && <ClanTab cards={allCards} userSlug={userSlug} />}
 

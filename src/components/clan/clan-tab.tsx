@@ -6,6 +6,7 @@ import { useClanPortfolios } from "@/lib/clan/use-clan-portfolios";
 import type { MemberLoadState } from "@/lib/clan/use-clan-portfolios";
 import { CommandBar } from "@/components/command-bar/command-bar";
 import { ClanMessageBoard } from "./clan-message-board";
+import { ClanLineupsPanel } from "./clan-lineups-panel";
 import { cn } from "@/lib/utils";
 import type { SorareCard } from "@/lib/types";
 
@@ -242,9 +243,14 @@ export function ClanTab({ cards, userSlug }: { cards: SorareCard[]; userSlug: st
           {isLoading && <LoadingProgress memberStates={memberStates} />}
         </div>
 
-        {/* Message Board sidebar */}
-        <div className="w-[380px] overflow-hidden shrink-0">
-          <ClanMessageBoard userSlug={userSlug} />
+        {/* Right panel: Lineups + Message Board */}
+        <div className="w-[480px] shrink-0 flex flex-col overflow-hidden">
+          <div className="flex-[65] min-h-0 overflow-hidden">
+            <ClanLineupsPanel userSlug={userSlug} />
+          </div>
+          <div className="flex-[35] min-h-0 overflow-hidden">
+            <ClanMessageBoard userSlug={userSlug} />
+          </div>
         </div>
       </div>
     </div>

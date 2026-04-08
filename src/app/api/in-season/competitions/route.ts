@@ -22,6 +22,7 @@ function parseSlot(appearance: any): InSeasonSlot {
     playerName: appearance.anyPlayer?.displayName ?? null,
     playerSlug: appearance.anyPlayer?.slug ?? null,
     pictureUrl: appearance.anyCard?.pictureUrl ?? appearance.anyPlayer?.squaredPictureUrl ?? null,
+    playerPictureUrl: appearance.anyPlayer?.squaredPictureUrl ?? null,
     rarityTyped: appearance.anyCard?.rarityTyped ?? null,
     isCaptain: appearance.captain ?? false,
     score: appearance.score ?? null,

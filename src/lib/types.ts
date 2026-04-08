@@ -304,6 +304,7 @@ export interface InSeasonSlot {
   playerName: string | null;
   playerSlug: string | null;
   pictureUrl: string | null;
+  playerPictureUrl: string | null;
   rarityTyped: RarityType | null;
   isCaptain: boolean;
   score: number | null;

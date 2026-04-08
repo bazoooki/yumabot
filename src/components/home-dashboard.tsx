@@ -9,10 +9,11 @@ import { useLiveScores } from "@/lib/hooks";
 import { useMarketStore } from "@/lib/market/market-store";
 import { fetchFixture, countMyPlayers, formatGameTime } from "@/lib/fixtures";
 import { getKickoffUrgency } from "@/lib/utils";
-import type { SorareCard, FixtureGame } from "@/lib/types";
+import type { SorareCard, FixtureGame, InSeasonCompetition } from "@/lib/types";
+import { LineupCard } from "@/components/lineup-card/lineup-card";
 import {
   Target, Clock, ChevronRight, TrendingUp, Tv, Trophy,
-  BarChart3, AlertTriangle, Zap,
+  BarChart3, AlertTriangle, Zap, Loader2,
 } from "lucide-react";
 
 type Tab = "home" | "lineup" | "market" | "live-games" | "in-season";
@@ -20,9 +21,22 @@ type Tab = "home" | "lineup" | "market" | "live-games" | "in-season";
 interface HomeDashboardProps {
   cards: SorareCard[];
   onNavigate: (tab: Tab) => void;
+  userSlug: string;
 }
 
-export function HomeDashboard({ cards, onNavigate }: HomeDashboardProps) {
+async function fetchLiveLineups(userSlug: string) {
+  const res = await fetch(
+    `/api/in-season/competitions?userSlug=${encodeURIComponent(userSlug)}&type=LIVE&seasonality=all`,
+  );
+  if (!res.ok) return null;
+  return res.json() as Promise<{
+    fixtureSlug: string;
+    gameWeek: number;
+    competitions: InSeasonCompetition[];
+  }>;
+}
+
+export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProps) {
   const { currentLevel, slots, targetScore } = useLineupStore();
   const streakLevel = STREAK_LEVELS.find((l) => l.level === currentLevel);
   const mode = getStrategyMode(currentLevel);
@@ -34,6 +48,27 @@ export function HomeDashboard({ cards, onNavigate }: HomeDashboardProps) {
   const totalOffers = useMarketStore((s) => s.totalOffers);
   const marketPlayers = useMarketStore((s) => s.players);
   const unacknowledgedCount = useMarketStore((s) => s.unacknowledgedCount);
+
+  // Live lineups — shared cache with Live Lineups tab
+  const { data: lineupsData, isLoading: lineupsLoading } = useQuery({
+    queryKey: ["in-season-competitions", userSlug, "LIVE"],
+    queryFn: () => fetchLiveLineups(userSlug),
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+  });
+
+  const liveLineups = useMemo(() => {
+    if (!lineupsData?.competitions) return [];
+    const result: { competition: InSeasonCompetition; teamIndex: number }[] = [];
+    for (const comp of lineupsData.competitions) {
+      for (let i = 0; i < comp.teams.length; i++) {
+        if (comp.teams[i].slots.some((s) => s.cardSlug)) {
+          result.push({ competition: comp, teamIndex: i });
+        }
+      }
+    }
+    return result;
+  }, [lineupsData]);
 
   // Fixture queries — shared cache with Live Games tab
   const { data: liveFixture } = useQuery({
@@ -115,6 +150,33 @@ export function HomeDashboard({ cards, onNavigate }: HomeDashboardProps) {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="px-6 py-5 space-y-5">
+
+        {/* ── Section 0: My Live Lineups ── */}
+        {(liveLineups.length > 0 || lineupsLoading) && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-pink-400" />
+              <h3 className="text-sm font-semibold text-zinc-200">
+                My Live Lineups
+              </h3>
+              {lineupsData?.gameWeek && (
+                <span className="text-[10px] text-zinc-600">GW{lineupsData.gameWeek}</span>
+              )}
+              {lineupsLoading && <Loader2 className="w-3 h-3 text-pink-400 animate-spin" />}
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {liveLineups.map(({ competition, teamIndex }) => (
+                <LineupCard
+                  key={`${competition.slug}-${teamIndex}`}
+                  competition={competition}
+                  teamIndex={teamIndex}
+                  variant="compact"
+                  className="min-w-[280px] shrink-0"
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Section 1: Compact Status Bar ── */}
         <div className="flex items-center gap-4 px-5 py-3 rounded-xl bg-zinc-900/80 border border-zinc-800">
