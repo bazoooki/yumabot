@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { CommandBarLineupResult } from "./command-bar-lineup-result";
+import { CommandBarClanResult } from "./command-bar-clan-result";
 import type { ToolCallStatus } from "@/lib/command-bar/use-command-bar";
 
 const TOOL_LABELS: Record<string, string> = {
@@ -23,6 +24,10 @@ const TOOL_LABELS: Record<string, string> = {
   get_slot_alternatives: "Alternatives loaded",
   clear_lineup: "Lineup cleared",
   get_collection_overview: "Collection loaded",
+  clan_overview: "Clan data loaded",
+  clan_find_cards: "Cards searched",
+  clan_trade_analysis: "Trade analysis done",
+  clan_member_cards: "Member cards loaded",
 };
 
 /** Simple markdown-like formatter: **bold** and - list items */
@@ -138,11 +143,16 @@ export function CommandBarResponse({
 
   if (!hasContent) return null;
 
-  // Rich result from current tool calls
+  // Rich results from current tool calls
   const lineupResult = toolCalls.find(
     (tc) =>
       tc.status === "executed" &&
       tc.metadata?.type === "lineup_recommendation",
+  );
+  const clanResult = toolCalls.find(
+    (tc) =>
+      tc.status === "executed" &&
+      (tc.metadata?.type === "clan_card_search" || tc.metadata?.type === "clan_trade_analysis"),
   );
 
   // Determine if the streaming text is already in messages (don't show twice)
@@ -179,6 +189,10 @@ export function CommandBarResponse({
 
           {lineupResult?.metadata && (
             <CommandBarLineupResult data={lineupResult.metadata} />
+          )}
+
+          {clanResult?.metadata && (
+            <CommandBarClanResult data={clanResult.metadata} />
           )}
 
           {streamedText && !streamingAlreadyInMessages && (

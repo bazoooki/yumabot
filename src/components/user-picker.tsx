@@ -1,12 +1,6 @@
 "use client";
 
-const USERS = [
-  { slug: "ba-zii", name: "Ba Zii" },
-  { slug: "jose_the_special_one", name: "Jose" },
-  { slug: "nimrodel", name: "Nimrodel" },
-  { slug: "el-loco-kibuttznik", name: "El Loco" },
-  { slug: "mcginnis", name: "McGinnis" },
-];
+import { CLAN_MEMBERS } from "@/lib/clan/members";
 
 export function UserPicker({ onSelect }: { onSelect: (slug: string) => void }) {
   return (
@@ -17,7 +11,7 @@ export function UserPicker({ onSelect }: { onSelect: (slug: string) => void }) {
           <p className="text-sm text-zinc-400">Who are you?</p>
         </div>
         <div className="space-y-2">
-          {USERS.map((user) => (
+          {CLAN_MEMBERS.map((user) => (
             <button
               key={user.slug}
               onClick={() => onSelect(user.slug)}

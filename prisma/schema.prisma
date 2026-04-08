@@ -27,8 +27,8 @@ model SavedLineup {
 }
 
 model CardCache {
-  id        Int      @id @default(1)
-  userSlug  String
+  id        Int      @id @default(autoincrement())
+  userSlug  String   @unique
   cardsJson String   // Full JSON blob of cards array
   cardCount Int
   fetchedAt DateTime @default(now())

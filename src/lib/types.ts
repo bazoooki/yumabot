@@ -38,6 +38,15 @@ export interface SorarePlayer {
   } | null;
 }
 
+export interface LeagueTrackEligibility {
+  entrySo5Leaderboard: {
+    seasonality: string;
+    so5LeaderboardType: string;
+    mainRarityType: string;
+    so5League: { displayName: string };
+  };
+}
+
 export interface SorareCard {
   slug: string;
   rarityTyped: RarityType;
@@ -49,6 +58,7 @@ export interface SorareCard {
   inSeasonEligible: boolean;
   cardEditionName: string | null;
   power: string;
+  eligibleUpcomingLeagueTracks?: LeagueTrackEligibility[];
   anyPlayer: SorarePlayer | null;
 }
 

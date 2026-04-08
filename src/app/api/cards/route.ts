@@ -18,7 +18,7 @@ interface CardsResponse {
   };
 }
 
-async function fetchFromSorare(slug: string): Promise<SorareCard[]> {
+export async function fetchFromSorare(slug: string): Promise<SorareCard[]> {
   const allCards: SorareCard[] = [];
   let cursor: string | null = null;
   let page = 0;
@@ -64,10 +64,9 @@ export async function GET(request: Request) {
   try {
     // Check cache first (unless force refresh)
     if (!forceRefresh) {
-      const cached = await prisma.cardCache.findUnique({ where: { id: 1 } });
+      const cached = await prisma.cardCache.findUnique({ where: { userSlug: slug } });
       if (
         cached &&
-        cached.userSlug === slug &&
         Date.now() - cached.fetchedAt.getTime() < CACHE_MAX_AGE_MS
       ) {
         const cards = JSON.parse(cached.cardsJson) as SorareCard[];
@@ -87,15 +86,13 @@ export async function GET(request: Request) {
 
     // Save to cache
     await prisma.cardCache.upsert({
-      where: { id: 1 },
+      where: { userSlug: slug },
       update: {
-        userSlug: slug,
         cardsJson: JSON.stringify(allCards),
         cardCount: allCards.length,
         fetchedAt: new Date(),
       },
       create: {
-        id: 1,
         userSlug: slug,
         cardsJson: JSON.stringify(allCards),
         cardCount: allCards.length,

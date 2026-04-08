@@ -43,6 +43,10 @@ function buildContextSnapshot(tab: string): string | undefined {
     return parts.join(". ");
   }
 
+  if (tab === "clan") {
+    return "Clan AI assistant — user can search cards across all clan members, find trade opportunities, and analyze lineups.";
+  }
+
   return undefined;
 }
 

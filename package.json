@@ -7,7 +7,8 @@
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "collector": "tsx worker/game-collector.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
@@ -39,6 +40,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

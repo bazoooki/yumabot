@@ -2,6 +2,7 @@ import type { SorareCard } from "@/lib/types";
 import { createMarketTools } from "./tools/market-tools";
 import { createLineupTools } from "./tools/lineup";
 import { createInSeasonTools } from "./tools/in-season";
+import { createClanTools } from "./tools/clan";
 import { createGlobalTools } from "./tools/global-tools";
 
 export interface ToolDefinition {
@@ -32,6 +33,8 @@ export function getToolsForScreen(
       return [...createLineupTools(cards), ...global];
     case "in-season":
       return [...createInSeasonTools(cards), ...global];
+    case "clan":
+      return [...createClanTools(cards), ...global];
     default:
       return global;
   }

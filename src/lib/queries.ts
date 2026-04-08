@@ -15,6 +15,16 @@ export const USER_CARDS_QUERY = gql`
           inSeasonEligible
           cardEditionName
           power
+          eligibleUpcomingLeagueTracks {
+            entrySo5Leaderboard {
+              seasonality
+              so5LeaderboardType
+              mainRarityType
+              so5League {
+                displayName
+              }
+            }
+          }
           anyPlayer {
             slug
             displayName

@@ -11,11 +11,12 @@ import { HomeDashboard } from "@/components/home-dashboard";
 import { LiveMarketTab } from "@/components/live-market/live-market-tab";
 import { LiveGamesTab } from "@/components/live-games/live-games-tab";
 import { InSeasonTab } from "@/components/in-season/in-season-tab";
+import { ClanTab } from "@/components/clan/clan-tab";
 import { useMarketStream } from "@/lib/market/use-market-stream";
 import type { CardsResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "home" | "lineup" | "market" | "live-games" | "in-season";
+type Tab = "home" | "lineup" | "market" | "live-games" | "in-season" | "clan";
 
 interface CardsApiResponse extends CardsResponse {
   cached?: boolean;
@@ -47,6 +48,7 @@ const TABS: { key: Tab; label: string; borderColor?: string; badge?: string }[] 
   { key: "market", label: "Live Market", borderColor: "border-green-400" },
   { key: "live-games", label: "Live Games", borderColor: "border-cyan-400" },
   { key: "in-season", label: "In Season", borderColor: "border-amber-400", badge: "beta" },
+  { key: "clan", label: "My Clan", borderColor: "border-violet-400", badge: "beta" },
 ];
 
 export default function GalleryPageWrapper() {
@@ -192,6 +194,7 @@ function GalleryPage() {
           {activeTab === "home" && <HomeDashboard cards={allCards} onNavigate={setActiveTab} />}
           {activeTab === "lineup" && <LineupBuilder cards={allCards} />}
           {activeTab === "in-season" && <InSeasonTab cards={allCards} userSlug={userSlug} />}
+          {activeTab === "clan" && <ClanTab cards={allCards} userSlug={userSlug} />}
 
           {/* Keep market & live-games always mounted so streams persist */}
           <div className={activeTab === "market" ? "flex flex-1 overflow-hidden" : "hidden"}>
