@@ -5,5 +5,9 @@ import { useCards } from "@/providers/cards-provider";
 
 export default function LineupPage() {
   const { cards } = useCards();
-  return <LineupBuilder cards={cards} />;
+  return (
+    <div className="page-enter flex flex-1 overflow-hidden">
+      <LineupBuilder cards={cards} />
+    </div>
+  );
 }

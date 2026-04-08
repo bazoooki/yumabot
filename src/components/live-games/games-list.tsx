@@ -1,9 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Clock, Loader2 } from "lucide-react";
+import { Calendar, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchFixture, countMyPlayers, formatGameTime } from "@/lib/fixtures";
+import { GameCardSkeleton } from "@/components/ui/skeleton";
 import type { SorareCard, FixtureGame } from "@/lib/types";
 
 interface Props {
@@ -49,8 +50,12 @@ export function GamesList({ cards, onSelectGame }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-zinc-500 animate-spin" />
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <GameCardSkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -144,13 +149,18 @@ function GameSection({
         <span className="text-[10px] text-zinc-600">{games.length}</span>
       </div>
       <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-        {games.map((game) => (
-          <GameCard
+        {games.map((game, i) => (
+          <div
             key={game.id}
-            game={game}
-            playerCount={countMyPlayers(game, cards)}
-            onClick={() => onSelectGame(game.id)}
-          />
+            className="card-enter"
+            style={{ animationDelay: `${i * 30}ms` }}
+          >
+            <GameCard
+              game={game}
+              playerCount={countMyPlayers(game, cards)}
+              onClick={() => onSelectGame(game.id)}
+            />
+          </div>
         ))}
       </div>
     </div>

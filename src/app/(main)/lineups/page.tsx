@@ -5,5 +5,9 @@ import { useCards } from "@/providers/cards-provider";
 
 export default function LineupsPage() {
   const { cards, userSlug } = useCards();
-  return <LiveLineupsTab cards={cards} userSlug={userSlug!} />;
+  return (
+    <div className="page-enter flex flex-1 overflow-hidden">
+      <LiveLineupsTab cards={cards} userSlug={userSlug!} />
+    </div>
+  );
 }

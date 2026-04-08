@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Trophy } from "lucide-react";
+import { Trophy } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/ui/query-error";
 import type { SorareCard, InSeasonCompetition } from "@/lib/types";
 import { useInSeasonStore, useSelectedCompetition } from "@/lib/in-season-store";
 import { CompetitionSelector } from "./competition-selector";
@@ -45,7 +47,7 @@ export function InSeasonTab({
   const competitions = useInSeasonStore((s) => s.competitions);
   const selected = useSelectedCompetition();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["in-season-competitions", userSlug, fixtureMode],
     queryFn: () => fetchCompetitions(userSlug, fixtureMode),
     staleTime: 5 * 60 * 1000,
@@ -95,27 +97,32 @@ export function InSeasonTab({
           </button>
         ))}
         {isLoading && (
-          <Loader2 className="w-3.5 h-3.5 text-amber-500 animate-spin ml-2" />
+          <Skeleton className="w-3.5 h-3.5 rounded-full ml-2" />
         )}
       </div>
 
       {/* Content */}
       {error ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center space-y-3 max-w-md">
-            <p className="text-lg font-medium text-red-400">
-              Error loading in-season data
-            </p>
-            <p className="text-sm text-zinc-500">
-              {error instanceof Error ? error.message : "Unknown error"}
-            </p>
-          </div>
-        </div>
+        <QueryError error={error instanceof Error ? error : new Error("Failed to load in-season data")} retry={() => void refetch()} />
       ) : isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center space-y-3">
-            <Loader2 className="w-8 h-8 text-amber-500 animate-spin mx-auto" />
-            <p className="text-sm text-zinc-500">Loading competitions...</p>
+        <div className="flex flex-1 overflow-hidden">
+          {/* Sidebar skeleton */}
+          <div className="w-64 border-r border-zinc-800 p-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="p-3 rounded-xl bg-zinc-900 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ))}
+          </div>
+          {/* Main content skeleton */}
+          <div className="flex-1 p-6 space-y-4">
+            <Skeleton className="h-6 w-48" />
+            <div className="grid grid-cols-5 gap-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 rounded-xl" />
+              ))}
+            </div>
           </div>
         </div>
       ) : competitions.length === 0 ? (

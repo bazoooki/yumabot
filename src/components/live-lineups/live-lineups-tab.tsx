@@ -2,7 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Trophy, LayoutGrid, List } from "lucide-react";
+import { Trophy, LayoutGrid, List } from "lucide-react";
+import { LineupCardSkeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/ui/query-error";
 import type { SorareCard, InSeasonCompetition } from "@/lib/types";
 import { LineupCard, type LineupCardVariant } from "@/components/lineup-card/lineup-card";
 import { cn } from "@/lib/utils";
@@ -37,7 +39,7 @@ export function LiveLineupsTab({
 }) {
   const [variant, setVariant] = useState<LineupCardVariant>("compact");
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["in-season-competitions", userSlug, "LIVE"],
     queryFn: () => fetchLiveLineups(userSlug),
     staleTime: 60 * 1000,
@@ -72,7 +74,7 @@ export function LiveLineupsTab({
             <span className="text-xs text-zinc-600">GW{data.gameWeek}</span>
           )}
           {isLoading && (
-            <Loader2 className="w-3.5 h-3.5 text-pink-400 animate-spin" />
+            <span className="w-3.5 h-3.5 rounded-full bg-zinc-800 animate-pulse" />
           )}
           {lineups.length > 0 && (
             <span className="text-[10px] text-zinc-600">
@@ -112,21 +114,13 @@ export function LiveLineupsTab({
 
       {/* Content */}
       {error ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center space-y-3 max-w-md">
-            <p className="text-lg font-medium text-red-400">
-              Error loading live lineups
-            </p>
-            <p className="text-sm text-zinc-500">
-              {error instanceof Error ? error.message : "Unknown error"}
-            </p>
-          </div>
-        </div>
+        <QueryError error={error instanceof Error ? error : new Error("Failed to load live lineups")} retry={() => void refetch()} />
       ) : isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center space-y-3">
-            <Loader2 className="w-8 h-8 text-pink-400 animate-spin mx-auto" />
-            <p className="text-sm text-zinc-500">Loading live lineups...</p>
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <LineupCardSkeleton key={i} />
+            ))}
           </div>
         </div>
       ) : lineups.length === 0 ? (

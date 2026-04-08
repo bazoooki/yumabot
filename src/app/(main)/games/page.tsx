@@ -6,7 +6,7 @@ import { useCards } from "@/providers/cards-provider";
 export default function GamesPage() {
   const { cards, userSlug } = useCards();
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="page-enter flex flex-1 overflow-hidden">
       <LiveGamesTab cards={cards} userSlug={userSlug!} />
     </div>
   );

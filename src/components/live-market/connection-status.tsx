@@ -47,6 +47,9 @@ export function ConnectionStatus() {
                 ? "Reconnecting..."
                 : "Disconnected"}
         </span>
+        {connectionStatus === "error" && (
+          <span className="text-[10px] text-red-400/60 ml-1">auto-retry</span>
+        )}
       </div>
 
       {/* Sales counter */}

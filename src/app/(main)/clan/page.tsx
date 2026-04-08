@@ -5,5 +5,9 @@ import { useCards } from "@/providers/cards-provider";
 
 export default function ClanPage() {
   const { cards, userSlug } = useCards();
-  return <ClanTab cards={cards} userSlug={userSlug!} />;
+  return (
+    <div className="page-enter flex flex-1 overflow-hidden">
+      <ClanTab cards={cards} userSlug={userSlug!} />
+    </div>
+  );
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Loader2, Wifi, WifiOff, BarChart3, Clock, Zap, MessageCircle } from "lucide-react";
+import { Wifi, WifiOff, BarChart3, Clock, Zap, MessageCircle } from "lucide-react";
 import { useGameStream } from "@/lib/hooks/use-game-stream";
+import { Skeleton, StatRowSkeleton } from "@/components/ui/skeleton";
 import { extractGoalScorers, getStatLabel } from "@/lib/game-events";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -135,8 +136,28 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-zinc-500 animate-spin" />
+      <div className="flex-1 p-6 space-y-4">
+        {/* Header skeleton */}
+        <div className="flex items-center gap-4">
+          <Skeleton className="w-10 h-10 rounded-full" />
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-6 w-16" />
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="w-10 h-10 rounded-full" />
+        </div>
+        {/* Lineup skeleton */}
+        <div className="grid grid-cols-2 gap-6">
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <StatRowSkeleton key={i} />
+            ))}
+          </div>
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <StatRowSkeleton key={i} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -299,7 +320,13 @@ function MatchHeader({
           {isScheduled ? (
             <p className="text-3xl font-black text-zinc-500">vs</p>
           ) : (
-            <p className="text-4xl font-black text-white tabular-nums tracking-wider">
+            <p
+              key={`${game.homeScore}-${game.awayScore}`}
+              className={cn(
+                "text-4xl font-black text-white tabular-nums tracking-wider",
+                isLive && "score-flash"
+              )}
+            >
               {game.homeScore} - {game.awayScore}
             </p>
           )}

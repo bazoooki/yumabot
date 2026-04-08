@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -81,11 +82,36 @@ export function TabNav() {
   const { cacheAgeMin, isFresh, isRefreshing, isLoading, handleRefresh } =
     useCards();
 
+  const navRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+
+  const updateIndicator = useCallback(() => {
+    if (!navRef.current) return;
+    const activeLink = navRef.current.querySelector<HTMLElement>("[data-active=true]");
+    if (activeLink) {
+      const navRect = navRef.current.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+      setIndicator({
+        left: linkRect.left - navRect.left,
+        width: linkRect.width,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    updateIndicator();
+  }, [pathname, updateIndicator]);
+
   return (
     <>
       {/* Desktop: horizontal top bar */}
       <nav className="hidden md:block border-b border-zinc-800 px-6">
-        <div className="flex items-center gap-6">
+        <div ref={navRef} className="relative flex items-center gap-6">
+          {/* Sliding indicator */}
+          <div
+            className="absolute bottom-0 h-0.5 bg-white transition-all duration-200 ease-out rounded-full"
+            style={{ left: indicator.left, width: indicator.width }}
+          />
           {TABS.map((tab) => {
             const active =
               pathname === tab.href || pathname.startsWith(tab.href + "/");
@@ -93,10 +119,11 @@ export function TabNav() {
               <Link
                 key={tab.href}
                 href={tab.href}
+                data-active={active}
                 className={cn(
                   "py-3 text-sm font-medium transition-colors flex items-center gap-1.5",
                   active
-                    ? `text-white border-b-2 ${tab.borderColor}`
+                    ? "text-white"
                     : "text-zinc-500 hover:text-zinc-300",
                 )}
               >

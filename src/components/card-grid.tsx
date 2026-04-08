@@ -2,7 +2,7 @@
 
 import { CardComponent } from "./card";
 import type { SorareCard } from "@/lib/types";
-import { Loader2 } from "lucide-react";
+import { CardSkeleton } from "./ui/skeleton";
 
 interface CardGridProps {
   cards: SorareCard[];
@@ -12,11 +12,10 @@ interface CardGridProps {
 export function CardGrid({ cards, isLoading }: CardGridProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-zinc-500" />
-          <p className="text-sm text-zinc-500">Loading your cards...</p>
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <CardSkeleton key={i} />
+        ))}
       </div>
     );
   }
@@ -35,9 +34,15 @@ export function CardGrid({ cards, isLoading }: CardGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-      {cards.map((card) => (
-        <CardComponent key={card.slug} card={card} />
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 content-ready">
+      {cards.map((card, i) => (
+        <div
+          key={card.slug}
+          className="card-enter"
+          style={{ animationDelay: `${Math.min(i, 20) * 30}ms` }}
+        >
+          <CardComponent card={card} />
+        </div>
       ))}
     </div>
   );

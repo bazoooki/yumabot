@@ -13,8 +13,9 @@ import type { SorareCard, FixtureGame, InSeasonCompetition } from "@/lib/types";
 import { LineupCard } from "@/components/lineup-card/lineup-card";
 import {
   Target, Clock, ChevronRight, TrendingUp, Tv, Trophy,
-  BarChart3, AlertTriangle, Zap, Loader2,
+  BarChart3, AlertTriangle, Zap,
 } from "lucide-react";
+import { LineupCardSkeleton } from "@/components/ui/skeleton";
 
 type Tab = "home" | "lineup" | "market" | "live-games" | "in-season";
 
@@ -162,9 +163,14 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
               {lineupsData?.gameWeek && (
                 <span className="text-[10px] text-zinc-600">GW{lineupsData.gameWeek}</span>
               )}
-              {lineupsLoading && <Loader2 className="w-3 h-3 text-pink-400 animate-spin" />}
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {lineupsLoading && liveLineups.length === 0 && (
+                <>
+                  <LineupCardSkeleton />
+                  <LineupCardSkeleton />
+                </>
+              )}
               {liveLineups.map(({ competition, teamIndex }) => (
                 <LineupCard
                   key={`${competition.slug}-${teamIndex}`}

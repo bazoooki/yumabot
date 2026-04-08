@@ -227,14 +227,15 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
           </div>
         ) : (
           sorted.map(({ player, isNew, owned }) => (
-            <PlayerRow
-              key={player.playerSlug}
-              player={player}
-              isNew={isNew}
-              isExpanded={expandedPlayer === player.playerSlug}
-              onToggle={() => toggleExpanded(player.playerSlug)}
-              owned={owned}
-            />
+            <div key={player.playerSlug} className={isNew ? "slide-enter" : undefined}>
+              <PlayerRow
+                player={player}
+                isNew={isNew}
+                isExpanded={expandedPlayer === player.playerSlug}
+                onToggle={() => toggleExpanded(player.playerSlug)}
+                owned={owned}
+              />
+            </div>
           ))
         )}
       </div>

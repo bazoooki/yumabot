@@ -28,10 +28,12 @@ export default function HomePage() {
   );
 
   return (
-    <HomeDashboard
-      cards={cards}
-      onNavigate={handleNavigate}
-      userSlug={userSlug!}
-    />
+    <div className="page-enter flex flex-1 overflow-hidden">
+      <HomeDashboard
+        cards={cards}
+        onNavigate={handleNavigate}
+        userSlug={userSlug!}
+      />
+    </div>
   );
 }

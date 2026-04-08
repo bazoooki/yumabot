@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/providers/query-provider";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,7 +31,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-[#0f0f0f] text-white">
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </QueryProvider>
         <Toaster position="top-right" theme="dark" richColors />
       </body>
     </html>
