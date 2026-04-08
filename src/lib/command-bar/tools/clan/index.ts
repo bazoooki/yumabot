@@ -9,6 +9,7 @@ interface SlimCard {
   inSeasonEligible: boolean;
   power: string;
   edition: string | null;
+  pictureUrl: string | null;
   playerName: string | null;
   playerSlug: string | null;
   position: string | null;
@@ -19,6 +20,17 @@ interface SlimCard {
   inSeasonLeagues: string[];
   /** All eligible leaderboard types */
   eligibleTypes: string[];
+  /** Whether the player has an upcoming game this GW */
+  hasUpcomingGame: boolean;
+  /** Whether the player is active at a club (false = transferred/retired) */
+  isActiveAtClub: boolean;
+  clubCode: string | null;
+  clubPictureUrl: string | null;
+  upcomingGame: {
+    date: string;
+    homeTeamCode: string;
+    awayTeamCode: string;
+  } | null;
 }
 
 interface ClanContext {
@@ -26,9 +38,9 @@ interface ClanContext {
   allCards: Record<string, SlimCard[]>;
 }
 
-/** Check if a card is truly eligible for in-season competitions using eligibleUpcomingLeagueTracks data */
+/** Check if a card is in-season — uses the authoritative inSeasonEligible boolean from Sorare */
 function isRealInSeason(card: SlimCard): boolean {
-  return card.inSeasonLeagues.length > 0;
+  return card.inSeasonEligible;
 }
 
 /** Check if a card is eligible for a specific competition (by league display name) */
@@ -39,6 +51,50 @@ function isEligibleForCompetition(card: SlimCard, competition: string): boolean 
   // Also check leaderboard types (e.g. "challenger" in "IN_SEASON_CHALLENGER_LIMITED")
   if (card.eligibleTypes.some((t) => t.toLowerCase().includes(q.replace(/\s+/g, "_")))) return true;
   return false;
+}
+
+/** Convert a SlimCard to a SorareCard shape so GridCard can render it */
+function slimToSorareCard(c: SlimCard): SorareCard {
+  const position = (c.position ?? "Forward") as import("@/lib/types").Position;
+  return {
+    slug: c.slug,
+    rarityTyped: c.rarityTyped as SorareCard["rarityTyped"],
+    pictureUrl: c.pictureUrl ?? "",
+    seasonYear: 0,
+    grade: 0,
+    xp: 0,
+    xpNeededForNextGrade: 0,
+    inSeasonEligible: c.inSeasonLeagues.length > 0,
+    cardEditionName: c.edition,
+    power: c.power,
+    anyPlayer: {
+      slug: c.playerSlug ?? "",
+      displayName: c.playerName ?? "Unknown",
+      cardPositions: [position],
+      age: 0,
+      averageScore: c.averageScore,
+      country: null,
+      activeClub: c.isActiveAtClub
+        ? {
+            slug: "",
+            name: c.clubName ?? "",
+            code: c.clubCode ?? undefined,
+            pictureUrl: c.clubPictureUrl ?? "",
+            domesticLeague: c.league ? { name: c.league } : null,
+            upcomingGames: c.upcomingGame
+              ? [
+                  {
+                    date: c.upcomingGame.date,
+                    homeTeam: { code: c.upcomingGame.homeTeamCode, name: "", pictureUrl: "" },
+                    awayTeam: { code: c.upcomingGame.awayTeamCode, name: "", pictureUrl: "" },
+                    competition: { name: "" },
+                  },
+                ]
+              : [],
+          }
+        : null,
+    },
+  };
 }
 
 let _clanContext: ClanContext | null = null;
@@ -88,15 +144,19 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
       definition: {
         name: "clan_find_cards",
         description:
-          "Search across all clan members' cards by position, rarity, competition eligibility, league, or player name. " +
-          "Returns matching cards grouped by member. Use this to find trade opportunities.\n" +
-          "IMPORTANT: When the user mentions a competition (e.g. 'Challenger', 'Contender', 'Premier League', 'La Liga'), " +
-          "use the 'competition' parameter — it applies ALL Sorare eligibility rules: inSeasonEligible + correct rarity + league match. " +
-          "Cross-league competitions (Challenger, Contender, European, Global) allow any league. " +
-          "League-specific competitions (e.g. 'Premier League') only allow players from that league.",
+          "Search across all clan members' cards. Returns cards grouped by member, deduplicated by player.\n\n" +
+          "You MUST provide the 'competition' parameter. It filters cards by REAL Sorare eligibility data.\n" +
+          "Examples: 'Challenger', 'Contender', 'Premier League', 'La Liga', 'Bundesliga', 'Serie A'.\n" +
+          "Cross-league: Challenger, Contender, European, Global (any league).\n" +
+          "If the user doesn't specify a competition, ask them which one, or default to 'Challenger'.",
         input_schema: {
           type: "object" as const,
           properties: {
+            competition: {
+              type: "string",
+              description: "REQUIRED. Competition for eligibility (e.g. 'Challenger', 'Contender', 'Premier League'). " +
+                "Filters using real eligibleUpcomingLeagueTracks from Sorare. Always provide this.",
+            },
             position: {
               type: "string",
               description: "Position filter: Goalkeeper, Defender, Midfielder, Forward",
@@ -105,14 +165,9 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
               type: "string",
               description: "Rarity filter: common, limited, rare, super_rare, unique",
             },
-            competition: {
-              type: "string",
-              description: "Competition/league name for full eligibility check (e.g. 'Challenger', 'Premier League', 'La Liga'). " +
-                "Applies: inSeasonEligible=true + rarity match + league restriction. Must also provide rarity when using this.",
-            },
-            inSeasonOnly: {
+            includeClassic: {
               type: "boolean",
-              description: "Only return in-season eligible cards (use 'competition' instead for proper eligibility)",
+              description: "Set true ONLY when user explicitly asks for classic/old/all cards. Default false = in-season only.",
             },
             league: {
               type: "string",
@@ -124,7 +179,7 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
             },
             excludeUser: {
               type: "string",
-              description: "Exclude this user slug from results (e.g. to find cards you don't have)",
+              description: "Exclude this user slug from results",
             },
             minScore: {
               type: "number",
@@ -132,7 +187,7 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
             },
             limit: {
               type: "number",
-              description: "Max results per member (default 10)",
+              description: "Max results per member (default 5)",
             },
           },
         },
@@ -142,14 +197,19 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
         const position = input.position as string | undefined;
         const rarity = input.rarity as string | undefined;
         const competition = input.competition as string | undefined;
-        const inSeasonOnly = input.inSeasonOnly as boolean | undefined;
+        const includeClassic = input.includeClassic === true;
         const league = input.league as string | undefined;
         const playerName = input.playerName as string | undefined;
         const excludeUser = input.excludeUser as string | undefined;
         const minScore = input.minScore as number | undefined;
-        const limit = (input.limit as number) || 10;
+        const limit = (input.limit as number) || 5;
 
-        const lines: string[] = [];
+        console.log("[clan_find_cards] params:", { competition, position, rarity, includeClassic, league, playerName, excludeUser, minScore, limit });
+
+        const memberResults: Array<{
+          member: typeof CLAN_MEMBERS[number];
+          cards: SlimCard[];
+        }> = [];
         let totalFound = 0;
 
         for (const m of CLAN_MEMBERS) {
@@ -157,53 +217,60 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
 
           let filtered = ctx.allCards[m.slug] || [];
 
+          // Always exclude transferred/retired players
+          filtered = filtered.filter((c) => c.isActiveAtClub);
+
+          // DEFAULT: in-season only. Classic cards only if explicitly requested.
+          if (!includeClassic) {
+            filtered = filtered.filter((c) => isRealInSeason(c));
+          }
+
+          // Competition eligibility — strict check against real Sorare data
+          if (competition) {
+            filtered = filtered.filter((c) => isEligibleForCompetition(c, competition));
+          }
+
+          if (rarity) {
+            filtered = filtered.filter((c) => c.rarityTyped === rarity);
+          }
+
           if (position) {
             filtered = filtered.filter((c) =>
               c.position?.toLowerCase().startsWith(position.toLowerCase().slice(0, 3)),
             );
           }
 
-          // Competition eligibility using real eligibleUpcomingLeagueTracks
-          if (competition) {
-            filtered = filtered.filter((c) => {
-              if (rarity && c.rarityTyped !== rarity) return false;
-              return isEligibleForCompetition(c, competition);
-            });
-          } else {
-            if (rarity) {
-              filtered = filtered.filter((c) => c.rarityTyped === rarity);
-            }
-            if (inSeasonOnly) {
-              filtered = filtered.filter((c) => isRealInSeason(c));
-            }
-          }
-
           if (league) {
             const q = league.toLowerCase();
-            filtered = filtered.filter((c) =>
-              c.league?.toLowerCase().includes(q),
-            );
+            filtered = filtered.filter((c) => c.league?.toLowerCase().includes(q));
           }
           if (playerName) {
             const q = playerName.toLowerCase();
-            filtered = filtered.filter((c) =>
-              c.playerName?.toLowerCase().includes(q),
-            );
+            filtered = filtered.filter((c) => c.playerName?.toLowerCase().includes(q));
           }
           if (minScore) {
             filtered = filtered.filter((c) => (c.averageScore ?? 0) >= minScore);
           }
 
-          filtered.sort((a, b) => (b.averageScore ?? 0) - (a.averageScore ?? 0));
+          // Sort: players with upcoming game first, then by score
+          filtered.sort((a, b) => {
+            if (a.hasUpcomingGame !== b.hasUpcomingGame) return a.hasUpcomingGame ? -1 : 1;
+            return (b.averageScore ?? 0) - (a.averageScore ?? 0);
+          });
+
+          // Deduplicate by player — keep best card per player
+          const seen = new Set<string>();
+          filtered = filtered.filter((c) => {
+            const key = c.playerSlug ?? c.playerName ?? c.slug;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+
           filtered = filtered.slice(0, limit);
 
           if (filtered.length > 0) {
-            lines.push(`\n${m.name} (${m.slug}${m.slug === ctx.userSlug ? " — YOU" : ""}):`);
-            for (const c of filtered) {
-              lines.push(
-                `  ${c.playerName ?? "?"} — ${c.position ?? "?"} | ${c.rarityTyped} | Avg: ${c.averageScore?.toFixed(1) ?? "?"} | ${c.clubName ?? "?"} (${c.league ?? ""}) | Power: ${c.power}${isRealInSeason(c) ? " | IS" : ""}${c.edition ? " | " + c.edition : ""}`,
-              );
-            }
+            memberResults.push({ member: m, cards: filtered });
             totalFound += filtered.length;
           }
         }
@@ -212,60 +279,34 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
           return "No cards found matching those filters across clan members.";
         }
 
-        // Build rich metadata for UI
-        const memberResults: Array<{
-          name: string;
-          slug: string;
-          isYou: boolean;
-          cards: Array<{
-            playerName: string;
-            position: string;
-            rarity: string;
-            averageScore: number;
-            power: string;
-            club: string;
-            league: string;
-            inSeason: boolean;
-          }>;
-        }> = [];
-
-        for (const m of CLAN_MEMBERS) {
-          if (excludeUser && m.slug === excludeUser) continue;
-          let cards = ctx.allCards[m.slug] || [];
-          if (position) cards = cards.filter((c) => c.position?.toLowerCase().startsWith(position.toLowerCase().slice(0, 3)));
-          if (rarity) cards = cards.filter((c) => c.rarityTyped === rarity);
-          if (inSeasonOnly) cards = cards.filter((c) => isRealInSeason(c));
-          if (league) { const q = league.toLowerCase(); cards = cards.filter((c) => c.league?.toLowerCase().includes(q)); }
-          if (playerName) { const q = playerName.toLowerCase(); cards = cards.filter((c) => c.playerName?.toLowerCase().includes(q)); }
-          if (minScore) cards = cards.filter((c) => (c.averageScore ?? 0) >= minScore);
-          cards.sort((a, b) => (b.averageScore ?? 0) - (a.averageScore ?? 0));
-          cards = cards.slice(0, limit);
-          if (cards.length > 0) {
-            memberResults.push({
-              name: m.name,
-              slug: m.slug,
-              isYou: m.slug === ctx.userSlug,
-              cards: cards.map((c) => ({
-                playerName: c.playerName ?? "Unknown",
-                position: c.position ?? "?",
-                rarity: c.rarityTyped,
-                averageScore: c.averageScore ?? 0,
-                power: c.power,
-                club: c.clubName ?? "?",
-                league: c.league ?? "",
-                inSeason: isRealInSeason(c),
-                edition: c.edition ?? "",
-              })),
-            });
+        // Build text for AI
+        const lines: string[] = [];
+        for (const { member: m, cards } of memberResults) {
+          lines.push(`\n${m.name} (${m.slug}${m.slug === ctx.userSlug ? " — YOU" : ""}):`);
+          for (const c of cards) {
+            const flags = [
+              c.hasUpcomingGame ? "" : "NO GAME",
+            ].filter(Boolean);
+            lines.push(
+              `  ${c.playerName ?? "?"} — ${c.position ?? "?"} | ${c.rarityTyped} | Avg: ${c.averageScore?.toFixed(1) ?? "?"} | ${c.clubName ?? "?"} (${c.league ?? ""}) | Power: ${c.power}${flags.length ? " | " + flags.join(" | ") : ""}`,
+            );
           }
         }
+
+        // Build rich metadata for UI — pass SorareCard-compatible shapes so we can reuse GridCard
+        const members = memberResults.map(({ member: m, cards }) => ({
+          name: m.name,
+          slug: m.slug,
+          isYou: m.slug === ctx.userSlug,
+          cards: cards.map((c) => slimToSorareCard(c)),
+        }));
 
         return {
           text: `Found ${totalFound} cards:\n${lines.join("\n")}`,
           metadata: {
             type: "clan_card_search",
             totalFound,
-            members: memberResults,
+            members,
           },
         };
       },
@@ -276,8 +317,8 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
         description:
           "Analyze trade opportunities between clan members for a specific position and rarity. " +
           "Finds members who have surplus cards at a position and members who need cards there. " +
-          "Considers in-season eligibility and lineup requirements.\n" +
-          "Use 'competition' for proper Sorare eligibility (same rules as clan_find_cards).",
+          "Default: in-season only. Set includeClassic=true for old/classic cards.\n" +
+          "Use 'competition' for strict eligibility (e.g. 'Challenger', 'Premier League').",
         input_schema: {
           type: "object" as const,
           properties: {
@@ -291,11 +332,11 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
             },
             competition: {
               type: "string",
-              description: "Competition name for eligibility (e.g. 'Challenger', 'Premier League'). Applies full rules.",
+              description: "Competition name for strict eligibility (e.g. 'Challenger', 'Premier League').",
             },
-            inSeasonOnly: {
+            includeClassic: {
               type: "boolean",
-              description: "Only consider in-season eligible cards (default true). Use 'competition' for proper filtering.",
+              description: "Set true ONLY when user explicitly asks for classic/old cards. Default false = in-season only.",
             },
           },
           required: ["position", "rarity"],
@@ -306,7 +347,9 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
         const position = input.position as string;
         const rarity = input.rarity as string;
         const competition = input.competition as string | undefined;
-        const inSeasonOnly = input.inSeasonOnly !== false;
+        const includeClassic = input.includeClassic === true;
+
+        console.log("[clan_trade_analysis] params:", { competition, position, rarity, includeClassic });
 
         const analysis: Array<{
           name: string;
@@ -318,29 +361,35 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
         for (const m of CLAN_MEMBERS) {
           const allMemberCards = ctx.allCards[m.slug] || [];
           let atPosition = allMemberCards.filter((c) => {
+            if (!c.isActiveAtClub) return false;
+            if (!includeClassic && !isRealInSeason(c)) return false;
             if (!c.position?.toLowerCase().startsWith(position.toLowerCase().slice(0, 3))) return false;
             if (c.rarityTyped !== rarity) return false;
-
-            if (competition) {
-              return isEligibleForCompetition(c, competition);
-            }
-
-            if (inSeasonOnly && !isRealInSeason(c)) return false;
+            if (competition && !isEligibleForCompetition(c, competition)) return false;
             return true;
           });
 
           atPosition.sort((a, b) => (b.averageScore ?? 0) - (a.averageScore ?? 0));
 
+          // Deduplicate by player
+          const seen = new Set<string>();
+          atPosition = atPosition.filter((c) => {
+            const key = c.playerSlug ?? c.playerName ?? c.slug;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+
           analysis.push({
             name: m.name,
             slug: m.slug,
             cards: atPosition,
-            totalOfRarity: allMemberCards.filter((c) => c.rarityTyped === rarity).length,
+            totalOfRarity: allMemberCards.filter((c) => c.rarityTyped === rarity && c.isActiveAtClub).length,
           });
         }
 
         const lines = [
-          `Trade Analysis: ${position} (${rarity}${inSeasonOnly ? ", in-season only" : ""})`,
+          `Trade Analysis: ${position} (${rarity}, in-season)`,
           "",
         ];
 
@@ -389,7 +438,7 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
           type: "clan_trade_analysis" as const,
           position,
           rarity,
-          inSeasonOnly,
+          inSeasonOnly: !includeClassic,
           surplus: surplus.map((m) => ({
             name: m.name,
             slug: m.slug,
@@ -402,6 +451,7 @@ export function createClanTools(_userCards: SorareCard[]): ToolHandler[] {
               power: c.power,
               club: c.clubName ?? "?",
               inSeason: isRealInSeason(c),
+              hasUpcomingGame: c.hasUpcomingGame,
             })),
           })),
           needy: needy.map((m) => ({

@@ -22,6 +22,7 @@ interface SlimCard {
   inSeasonEligible: boolean;
   power: string;
   edition: string | null;
+  pictureUrl: string | null;
   playerName: string | null;
   playerSlug: string | null;
   position: string | null;
@@ -32,6 +33,20 @@ interface SlimCard {
   inSeasonLeagues: string[];
   /** All eligible leaderboard types (e.g. ["IN_SEASON_KOREA_LIMITED_PVP"]) */
   eligibleTypes: string[];
+  /** Whether the player has an upcoming game this GW */
+  hasUpcomingGame: boolean;
+  /** Whether the player is active at a club (false = transferred/retired) */
+  isActiveAtClub: boolean;
+  /** Club short code (e.g. "LIV") */
+  clubCode: string | null;
+  /** Club picture URL */
+  clubPictureUrl: string | null;
+  /** First upcoming game details (for display) */
+  upcomingGame: {
+    date: string;
+    homeTeamCode: string;
+    awayTeamCode: string;
+  } | null;
 }
 
 interface MemberSummary {
@@ -121,8 +136,10 @@ function slimCards(cards: SorareCard[]): SlimCard[] {
       ...new Set(inSeasonTracks.map((t) => t.entrySo5Leaderboard.so5League.displayName)),
     ];
 
-    // All eligible leaderboard types (for precise matching)
-    const eligibleTypes = tracks.map((t) => t.entrySo5Leaderboard.so5LeaderboardType);
+    // In-season eligible leaderboard types ONLY (not upcoming season)
+    const eligibleTypes = inSeasonTracks.map((t) => t.entrySo5Leaderboard.so5LeaderboardType);
+
+    const activeClub = c.anyPlayer?.activeClub;
 
     return {
       slug: c.slug,
@@ -130,14 +147,26 @@ function slimCards(cards: SorareCard[]): SlimCard[] {
       inSeasonEligible: c.inSeasonEligible,
       power: c.power,
       edition: c.cardEditionName ?? null,
+      pictureUrl: c.pictureUrl ?? null,
       playerName: c.anyPlayer?.displayName ?? null,
       playerSlug: c.anyPlayer?.slug ?? null,
       position: c.anyPlayer?.cardPositions?.[0] ?? null,
       averageScore: c.anyPlayer?.averageScore ?? null,
-      clubName: c.anyPlayer?.activeClub?.name ?? null,
-      league: c.anyPlayer?.activeClub?.domesticLeague?.name ?? null,
+      clubName: activeClub?.name ?? null,
+      league: activeClub?.domesticLeague?.name ?? null,
       inSeasonLeagues,
       eligibleTypes,
+      hasUpcomingGame: (activeClub?.upcomingGames?.length ?? 0) > 0,
+      isActiveAtClub: activeClub != null,
+      clubCode: activeClub?.code ?? null,
+      clubPictureUrl: activeClub?.pictureUrl ?? null,
+      upcomingGame: activeClub?.upcomingGames?.[0]
+        ? {
+            date: activeClub.upcomingGames[0].date,
+            homeTeamCode: activeClub.upcomingGames[0].homeTeam.code,
+            awayTeamCode: activeClub.upcomingGames[0].awayTeam.code,
+          }
+        : null,
     };
   });
 }

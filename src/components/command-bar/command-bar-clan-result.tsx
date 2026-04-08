@@ -1,27 +1,20 @@
 "use client";
 
-import { ArrowRightLeft, TrendingUp, TrendingDown, AlertTriangle, Check } from "lucide-react";
+import { useState } from "react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, AlertTriangle, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { POSITION_COLORS, POSITION_SHORT } from "@/lib/ui-config";
+import { POSITION_SHORT } from "@/lib/ui-config";
 import { RARITY_CONFIG } from "@/lib/types";
+import type { SorareCard } from "@/lib/types";
+import { GridCard } from "@/components/lineup-builder/grid-card";
 
-interface CardData {
-  playerName: string;
-  position: string;
-  rarity?: string;
-  averageScore: number;
-  power: string;
-  club: string;
-  league?: string;
-  inSeason: boolean;
-  edition?: string;
-}
+const CARDS_PREVIEW_COUNT = 6;
 
 interface MemberCards {
   name: string;
   slug: string;
   isYou: boolean;
-  cards: CardData[];
+  cards: SorareCard[];
 }
 
 interface TradeAnalysis {
@@ -34,7 +27,7 @@ interface TradeAnalysis {
     slug: string;
     isYou: boolean;
     cardCount: number;
-    cards: CardData[];
+    cards: SorareCard[];
   }>;
   needy: Array<{
     name: string;
@@ -56,60 +49,24 @@ interface CardSearch {
   members: MemberCards[];
 }
 
-function CardChip({ card }: { card: CardData }) {
-  const rarityConf = card.rarity ? RARITY_CONFIG[card.rarity] : null;
-
+function CardGrid({ cards }: { cards: SorareCard[] }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-800/60 border border-zinc-700/40 hover:border-zinc-600/60 transition-all">
-      {/* Position badge */}
-      <span
-        className={cn(
-          "px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0",
-          POSITION_COLORS[card.position] ?? "bg-zinc-700 text-zinc-300 border-zinc-600",
-        )}
-      >
-        {POSITION_SHORT[card.position] ?? card.position?.slice(0, 3).toUpperCase()}
-      </span>
-
-      {/* Player info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-white truncate">
-            {card.playerName}
-          </span>
-          {card.inSeason && (
-            <span className="text-[8px] px-1 py-0.5 rounded bg-green-500/15 text-green-400 font-bold shrink-0">
-              IS
-            </span>
-          )}
-        </div>
-        <span className="text-[10px] text-zinc-500 truncate block">
-          {card.club}
-          {card.edition ? ` · ${card.edition}` : ""}
-        </span>
-      </div>
-
-      {/* Score + power */}
-      <div className="text-right shrink-0">
-        <div className="text-[11px] font-bold text-white">
-          {card.averageScore.toFixed(1)}
-        </div>
-        <div className="text-[9px] text-zinc-500">
-          {card.power}
-        </div>
-      </div>
-
-      {/* Rarity dot */}
-      {rarityConf && (
-        <span className={cn("w-2 h-2 rounded-full shrink-0", rarityConf.dotColor)} title={rarityConf.label} />
-      )}
+    <div className="grid grid-cols-[repeat(auto-fill,130px)] gap-2">
+      {cards.map((card, i) => (
+        <GridCard key={`${card.slug}-${i}`} card={card} />
+      ))}
     </div>
   );
 }
 
 function MemberSection({ member }: { member: MemberCards }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = member.cards.length > CARDS_PREVIEW_COUNT;
+  const visibleCards = expanded ? member.cards : member.cards.slice(0, CARDS_PREVIEW_COUNT);
+  const hiddenCount = member.cards.length - CARDS_PREVIEW_COUNT;
+
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <div className="flex items-center gap-2">
         <div
           className={cn(
@@ -129,10 +86,75 @@ function MemberSection({ member }: { member: MemberCards }) {
           {member.cards.length} card{member.cards.length !== 1 ? "s" : ""}
         </span>
       </div>
-      <div className="space-y-1 ml-8">
-        {member.cards.map((card, i) => (
-          <CardChip key={`${card.playerName}-${i}`} card={card} />
-        ))}
+      <div className="ml-8">
+        <CardGrid cards={visibleCards} />
+        {hasMore && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors py-1.5 px-2 mt-1"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="w-3 h-3" />
+                Show less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-3 h-3" />
+                {hiddenCount} more card{hiddenCount !== 1 ? "s" : ""}
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SurplusMember({ member }: { member: TradeAnalysis["surplus"][number] }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = member.cards.length > CARDS_PREVIEW_COUNT;
+  const visibleCards = expanded ? member.cards : member.cards.slice(0, CARDS_PREVIEW_COUNT);
+  const hiddenCount = member.cards.length - CARDS_PREVIEW_COUNT;
+
+  return (
+    <div className="space-y-2 ml-5">
+      <div className="flex items-center gap-2">
+        <div
+          className={cn(
+            "w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold",
+            member.isYou ? "bg-violet-500/30 text-violet-300" : "bg-zinc-700 text-zinc-400",
+          )}
+        >
+          {member.name.slice(0, 2).toUpperCase()}
+        </div>
+        <span className="text-[11px] font-medium text-zinc-300">
+          {member.name}{member.isYou ? " (You)" : ""}
+        </span>
+        <span className="text-[10px] text-green-400/70 ml-auto">
+          {member.cardCount} cards
+        </span>
+      </div>
+      <div className="ml-7">
+        <CardGrid cards={visibleCards} />
+        {hasMore && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors py-1.5 px-2 mt-1"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="w-3 h-3" />
+                Show less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-3 h-3" />
+                {hiddenCount} more
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -193,29 +215,7 @@ export function CommandBarClanResult({ data }: { data: Record<string, unknown> }
               Surplus — can trade
             </div>
             {trade.surplus.map((m) => (
-              <div key={m.slug} className="space-y-1.5 ml-5">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={cn(
-                      "w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold",
-                      m.isYou ? "bg-violet-500/30 text-violet-300" : "bg-zinc-700 text-zinc-400",
-                    )}
-                  >
-                    {m.name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <span className="text-[11px] font-medium text-zinc-300">
-                    {m.name}{m.isYou ? " (You)" : ""}
-                  </span>
-                  <span className="text-[10px] text-green-400/70 ml-auto">
-                    {m.cardCount} cards
-                  </span>
-                </div>
-                <div className="space-y-1 ml-7">
-                  {m.cards.map((card, i) => (
-                    <CardChip key={`${card.playerName}-${i}`} card={card} />
-                  ))}
-                </div>
-              </div>
+              <SurplusMember key={m.slug} member={m} />
             ))}
           </div>
         )}

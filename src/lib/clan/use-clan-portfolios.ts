@@ -1,7 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useMemo, useEffect } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { CLAN_MEMBERS } from "./members";
 import { setClanContext } from "@/lib/command-bar/tools/clan";
 import type { PortfolioIndex, OwnedPlayerInfo } from "@/lib/market/portfolio-utils";
@@ -14,6 +13,7 @@ interface SlimCard {
   inSeasonEligible: boolean;
   power: string;
   edition: string | null;
+  pictureUrl: string | null;
   playerName: string | null;
   playerSlug: string | null;
   position: string | null;
@@ -22,6 +22,15 @@ interface SlimCard {
   league: string | null;
   inSeasonLeagues: string[];
   eligibleTypes: string[];
+  hasUpcomingGame: boolean;
+  isActiveAtClub: boolean;
+  clubCode: string | null;
+  clubPictureUrl: string | null;
+  upcomingGame: {
+    date: string;
+    homeTeamCode: string;
+    awayTeamCode: string;
+  } | null;
 }
 
 /** Shape returned by /api/clan/cards per member */
@@ -32,29 +41,72 @@ interface MemberSummary {
   cards?: SlimCard[];
 }
 
-type ApiResponse = Record<string, MemberSummary>;
+export interface MemberLoadState {
+  slug: string;
+  name: string;
+  status: "pending" | "loading" | "loaded" | "error";
+  cardCount?: number;
+}
 
-async function fetchClanSummary(): Promise<ApiResponse> {
-  const slugs = CLAN_MEMBERS.map((m) => m.slug).join(",");
-  const res = await fetch(`/api/clan/cards?slugs=${slugs}`);
-  if (!res.ok) throw new Error("Failed to fetch clan cards");
-  return res.json();
+async function fetchMemberCards(slug: string): Promise<MemberSummary> {
+  const res = await fetch(`/api/clan/cards?slugs=${slug}`);
+  if (!res.ok) throw new Error(`Failed to fetch ${slug}`);
+  const data = await res.json();
+  return data[slug] as MemberSummary;
 }
 
 export function useClanPortfolios(userSlug: string): {
   data: ClanPortfolios | null;
   isLoading: boolean;
   error: Error | null;
+  memberStates: MemberLoadState[];
+  refresh: () => void;
 } {
-  const { data: summaryMap, isLoading, error } = useQuery({
-    queryKey: ["clan-cards"],
-    queryFn: fetchClanSummary,
-    staleTime: 6 * 60 * 60 * 1000, // 6 hours
-  });
+  const [memberStates, setMemberStates] = useState<MemberLoadState[]>(
+    CLAN_MEMBERS.map((m) => ({ slug: m.slug, name: m.name, status: "pending" as const })),
+  );
+  const [portfolios, setPortfolios] = useState<ClanPortfolios | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const summaryRef = useRef<Record<string, MemberSummary>>({});
+  const loadingRef = useRef(false);
 
-  const portfolios = useMemo<ClanPortfolios | null>(() => {
-    if (!summaryMap) return null;
+  const loadAll = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
 
+    summaryRef.current = {};
+    setPortfolios(null);
+    setError(null);
+    setMemberStates(
+      CLAN_MEMBERS.map((m) => ({ slug: m.slug, name: m.name, status: "loading" as const })),
+    );
+
+    // Fetch all members in parallel
+    const promises = CLAN_MEMBERS.map(async (m) => {
+      try {
+        const summary = await fetchMemberCards(m.slug);
+        summaryRef.current[m.slug] = summary;
+        setMemberStates((prev) =>
+          prev.map((s) =>
+            s.slug === m.slug
+              ? { ...s, status: "loaded" as const, cardCount: summary.stats.cardCount }
+              : s,
+          ),
+        );
+      } catch (err) {
+        console.error(`[clan] Failed to fetch ${m.slug}:`, err);
+        setMemberStates((prev) =>
+          prev.map((s) =>
+            s.slug === m.slug ? { ...s, status: "error" as const } : s,
+          ),
+        );
+      }
+    });
+
+    await Promise.all(promises);
+
+    // Build portfolios from collected data
+    const summaryMap = summaryRef.current;
     const indexes: ClanPortfolios["indexes"] = {};
     const stats: ClanPortfolios["stats"] = {};
 
@@ -73,13 +125,9 @@ export function useClanPortfolios(userSlug: string): {
       indexes[slug] = { bySlug, byName } as PortfolioIndex;
     }
 
-    return { indexes, stats };
-  }, [summaryMap]);
+    setPortfolios({ indexes, stats });
 
-  // Set clan context for tools whenever data changes
-  useEffect(() => {
-    if (!summaryMap) return;
-
+    // Set clan context for tools
     const allCards: Record<string, SlimCard[]> = {};
     let totalCards = 0;
     for (const [slug, summary] of Object.entries(summaryMap)) {
@@ -89,7 +137,21 @@ export function useClanPortfolios(userSlug: string): {
 
     console.log(`[clan] Setting context: ${Object.keys(allCards).length} members, ${totalCards} total cards`);
     setClanContext({ userSlug, allCards });
-  }, [summaryMap, userSlug]);
 
-  return { data: portfolios, isLoading, error: error as Error | null };
+    loadingRef.current = false;
+  }, [userSlug]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  const isLoading = memberStates.some((s) => s.status === "loading" || s.status === "pending");
+
+  return {
+    data: portfolios,
+    isLoading,
+    error,
+    memberStates,
+    refresh: loadAll,
+  };
 }
