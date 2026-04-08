@@ -45,9 +45,10 @@ create table room_scores (
 );
 
 -- Room messages (AI narration + chat)
+-- room_id is text (not FK) so it works for game rooms ("game-xxx"), market ("live-market"), and regular rooms (UUIDs)
 create table room_messages (
   id uuid primary key default gen_random_uuid(),
-  room_id uuid references rooms(id) on delete cascade,
+  room_id text not null,
   author text not null,
   message text not null,
   message_type text not null default 'chat',

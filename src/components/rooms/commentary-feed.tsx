@@ -53,7 +53,16 @@ export function CommentaryFeed({
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as RoomMessage]);
+          const msg = payload.new as RoomMessage;
+          setMessages((prev) => {
+            // Deduplicate (optimistic message may already exist)
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            // Replace optimistic messages from same author with same text
+            const withoutOptimistic = prev.filter(
+              (m) => !(m.author === msg.author && m.message === msg.message && m.id !== msg.id),
+            );
+            return [...withoutOptimistic, msg];
+          });
         }
       )
       .subscribe();
@@ -76,13 +85,31 @@ export function CommentaryFeed({
     setChatInput("");
     setIsSending(true);
 
-    await supabase.from("room_messages").insert({
+    // Optimistic: show message immediately
+    const optimistic: RoomMessage = {
+      id: crypto.randomUUID(),
+      room_id: roomId,
+      author: userSlug,
+      message: text,
+      message_type: "chat",
+      metadata: {},
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimistic]);
+
+    const { error } = await supabase.from("room_messages").insert({
       room_id: roomId,
       author: userSlug,
       message: text,
       message_type: "chat",
       metadata: {},
     });
+
+    if (error) {
+      console.error("Chat insert failed:", error);
+      // Remove optimistic message on failure
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+    }
 
     setIsSending(false);
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Loader2, Wifi, WifiOff, BarChart3, Clock, Zap, MessageCircle, X } from "lucide-react";
+import { Loader2, Wifi, WifiOff, BarChart3, Clock, Zap, MessageCircle } from "lucide-react";
 import { useGameStream } from "@/lib/hooks/use-game-stream";
 import { extractGoalScorers, getStatLabel } from "@/lib/game-events";
 import { supabase } from "@/lib/supabase";
@@ -24,7 +24,6 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
   const [activeTab, setActiveTab] = useState<"lineups" | "stats" | "players">(
     "lineups",
   );
-  const [chatOpen, setChatOpen] = useState(false);
   const [lineupPlayerSlugs, setLineupPlayerSlugs] = useState<Set<string> | null>(null);
   const feedVariant = 8;
   const events = liveEvents;
@@ -34,29 +33,36 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
   useEffect(() => {
     const channel = supabase.channel(`game-presence-${gameId}`);
 
-    channel
-      .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState<{ slug: string }>();
-        // Deduplicate by slug (same user may have multiple tabs)
-        const seen = new Set<string>();
-        const users: { slug: string }[] = [];
-        for (const entries of Object.values(state)) {
-          for (const p of entries) {
-            if (!seen.has(p.slug)) {
-              seen.add(p.slug);
-              users.push({ slug: p.slug });
-            }
+    function syncWatchers() {
+      const state = channel.presenceState<{ slug: string }>();
+      const seen = new Set<string>();
+      const users: { slug: string }[] = [];
+      for (const entries of Object.values(state)) {
+        for (const p of entries) {
+          if (!seen.has(p.slug)) {
+            seen.add(p.slug);
+            users.push({ slug: p.slug });
           }
         }
-        setWatchers(users);
-      })
+      }
+      setWatchers(users);
+    }
+
+    channel
+      .on("presence", { event: "sync" }, syncWatchers)
+      .on("presence", { event: "join" }, syncWatchers)
+      .on("presence", { event: "leave" }, syncWatchers)
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await channel.track({ slug: userSlug });
+          const resp = await channel.track({ slug: userSlug });
+          if (resp !== "ok") {
+            console.error("Presence track failed:", resp);
+          }
         }
       });
 
     return () => {
+      channel.untrack();
       supabase.removeChannel(channel);
     };
   }, [gameId, userSlug]);
@@ -204,8 +210,8 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
         </div>
       </div>
 
-      {/* Right panel — watching + feed + chat bubble */}
-      <div className="w-[40%] flex flex-col overflow-hidden relative">
+      {/* Right panel — watching + feed (60%) + chat (40%) */}
+      <div className="w-[40%] flex flex-col overflow-hidden">
         {/* Watching indicator */}
         <div className="px-3 py-2.5 border-b border-zinc-800 shrink-0 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -238,8 +244,8 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
           </div>
         </div>
 
-        {/* Events feed */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Events feed — 60% */}
+        <div className="flex-[6] flex flex-col overflow-hidden min-h-0">
           <div className="px-3 py-1.5 border-b border-zinc-800 shrink-0">
             <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
               Live Feed
@@ -248,28 +254,14 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
           <EventsFeed events={events} variant={feedVariant} game={game} />
         </div>
 
-        {/* Chat bubble */}
-        <button
-          onClick={() => setChatOpen(!chatOpen)}
-          className={cn(
-            "absolute bottom-4 right-4 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all z-20",
-            chatOpen
-              ? "bg-zinc-700 text-white"
-              : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20",
-          )}
-        >
-          {chatOpen ? <X className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
-        </button>
-
-        {/* Chat overlay */}
-        {chatOpen && (
-          <div className="absolute bottom-16 right-4 left-4 h-[280px] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl shadow-black/50 z-20 flex flex-col overflow-hidden">
-            <div className="px-3 py-2 border-b border-zinc-800 shrink-0 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-zinc-300">Chat</h3>
-            </div>
-            <MatchChat gameId={gameId} userSlug={userSlug} />
+        {/* Chat — 40% */}
+        <div className="flex-[4] flex flex-col overflow-hidden min-h-0 border-t border-zinc-800">
+          <div className="px-3 py-1.5 border-b border-zinc-800 shrink-0 flex items-center gap-2">
+            <MessageCircle className="w-3 h-3 text-zinc-500" />
+            <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Chat</h3>
           </div>
-        )}
+          <MatchChat gameId={gameId} userSlug={userSlug} />
+        </div>
       </div>
     </div>
   );
