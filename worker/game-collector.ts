@@ -11,8 +11,12 @@
  */
 
 import { GraphQLClient } from "graphql-request";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { gql } from "graphql-request";
+import { config } from "dotenv";
+import { resolve } from "path";
+
+config({ path: resolve(process.cwd(), ".env.local") });
 
 // ── Types (mirror src/lib/types.ts — kept lean, no React deps) ──
 
@@ -254,9 +258,7 @@ async function discoverLiveGames(): Promise<void> {
 
     const games = data.so5.so5Fixture?.games ?? [];
     const football = games.filter((g) => g.sport === "FOOTBALL");
-    const live = football.filter(
-      (g) => g.statusTyped === "playing" || g.statusTyped === "scheduled",
-    );
+    const live = football.filter((g) => g.statusTyped === "playing");
 
     liveGameIds = new Set(live.map((g) => g.id));
 
