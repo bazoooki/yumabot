@@ -32,16 +32,22 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
 
   // Presence tracking — who's watching this game
   useEffect(() => {
-    const channel = supabase.channel(`game-presence-${gameId}`, {
-      config: { presence: { key: userSlug } },
-    });
+    const channel = supabase.channel(`game-presence-${gameId}`);
 
     channel
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<{ slug: string }>();
-        const users = Object.values(state)
-          .flat()
-          .map((p) => ({ slug: p.slug }));
+        // Deduplicate by slug (same user may have multiple tabs)
+        const seen = new Set<string>();
+        const users: { slug: string }[] = [];
+        for (const entries of Object.values(state)) {
+          for (const p of entries) {
+            if (!seen.has(p.slug)) {
+              seen.add(p.slug);
+              users.push({ slug: p.slug });
+            }
+          }
+        }
         setWatchers(users);
       })
       .subscribe(async (status) => {
@@ -1061,7 +1067,8 @@ function ExpandableEventRow({
 // ─── Match Chat ───
 
 function MatchChat({ gameId, userSlug }: { gameId: string; userSlug: string }) {
-  const roomId = `game-${gameId}`;
+  // Sanitize gameId for use as room_id (remove "Game:" prefix if present)
+  const roomId = `game-${gameId.replace(/^Game:/, "")}`;
   const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -1117,7 +1124,7 @@ function MatchChat({ gameId, userSlug }: { gameId: string; userSlug: string }) {
     setInput("");
     setIsSending(true);
 
-    await supabase.from("room_messages").insert({
+    const { error } = await supabase.from("room_messages").insert({
       room_id: roomId,
       author: userSlug,
       message: text,
@@ -1125,6 +1132,7 @@ function MatchChat({ gameId, userSlug }: { gameId: string; userSlug: string }) {
       metadata: {},
     });
 
+    if (error) console.error("Failed to send chat message:", error);
     setIsSending(false);
   }
 
