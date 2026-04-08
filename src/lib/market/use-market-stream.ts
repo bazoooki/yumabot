@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useMarketStore } from "./market-store";
 import type {
   MarketOffer,
@@ -64,6 +65,9 @@ export function useMarketStream() {
         if (soundRef.current && alert.severity === "critical") {
           playAlertSound();
         }
+        toast.warning(alert.title || "Market alert triggered", {
+          duration: 8000,
+        });
       } catch {
         // ignore
       }
@@ -75,6 +79,10 @@ export function useMarketStream() {
           status: MarketConnectionStatus;
         };
         setConnectionStatus(status);
+        if (status === "connected") {
+          toast.dismiss("market-stream-status");
+          toast.success("Market feed connected", { duration: 3000 });
+        }
       } catch {
         // ignore
       }
@@ -104,7 +112,10 @@ export function useMarketStream() {
 
     es.onerror = () => {
       setConnectionStatus("error");
-      // EventSource auto-reconnects
+      toast.error("Market feed disconnected. Reconnecting...", {
+        id: "market-stream-status",
+        duration: Infinity,
+      });
     };
 
     return () => {

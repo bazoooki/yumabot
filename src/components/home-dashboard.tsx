@@ -20,7 +20,7 @@ type Tab = "home" | "lineup" | "market" | "live-games" | "in-season";
 
 interface HomeDashboardProps {
   cards: SorareCard[];
-  onNavigate: (tab: Tab) => void;
+  onNavigate: (tab: string) => void;
   userSlug: string;
 }
 
