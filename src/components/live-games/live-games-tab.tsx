@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState, useCallback } from "react";
 import { Tv, ChevronLeft } from "lucide-react";
 import type { SorareCard } from "@/lib/types";
 import { GamesList } from "./games-list";
@@ -13,22 +12,15 @@ interface Props {
 }
 
 export function LiveGamesTab({ cards, userSlug }: Props) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const selectedGameId = searchParams.get("game");
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
 
   const selectGame = useCallback((id: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("game", id);
-    router.push(`?${params.toString()}`);
-  }, [searchParams, router]);
+    setSelectedGameId(id);
+  }, []);
 
   const clearGame = useCallback(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("game");
-    const qs = params.toString();
-    router.push(qs ? `?${qs}` : "/");
-  }, [searchParams, router]);
+    setSelectedGameId(null);
+  }, []);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

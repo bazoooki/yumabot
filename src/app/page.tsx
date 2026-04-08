@@ -2,7 +2,6 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { Header } from "@/components/header";
 import { UserPicker } from "@/components/user-picker";
@@ -68,18 +67,11 @@ function GalleryPage() {
   // Keep market stream connected regardless of active tab
   useMarketStream();
 
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     setUserSlug(getStoredSlug());
   }, []);
 
-  // Auto-switch to live-games tab when ?game= param is present
-  useEffect(() => {
-    if (searchParams.get("game")) {
-      setActiveTab("live-games");
-    }
-  }, [searchParams]);
 
   const handleUserSelect = (slug: string) => {
     localStorage.setItem("yumabot-user-slug", slug);
