@@ -97,7 +97,7 @@ export const CardComponent = memo(function CardComponent({
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-purple-900/10"
+      className="group cursor-pointer rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition-all md:hover:scale-[1.02] active:scale-[0.98] hover:shadow-xl hover:shadow-purple-900/10"
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -148,7 +148,7 @@ export const CardComponent = memo(function CardComponent({
       </div>
 
       {/* Info Bar */}
-      <div className="px-2.5 py-2 space-y-1">
+      <div className="px-2 py-1.5 md:px-2.5 md:py-2 space-y-1">
         {/* Country, Position, Age */}
         <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
           {flagUrl ? (

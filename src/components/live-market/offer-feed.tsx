@@ -98,9 +98,9 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
   return (
     <div className="flex flex-col h-full">
       {/* Row 1: Search + Filters */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 flex-wrap">
+      <div className="flex items-center gap-2 md:gap-3 px-3 py-2 md:px-4 md:py-3 border-b border-border/50 flex-wrap">
         {/* Search */}
-        <div className="relative flex-1 min-w-[160px]">
+        <div className="relative flex-1 min-w-[120px] md:min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
@@ -125,10 +125,10 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
           Mine
         </button>
 
-        <div className="w-px h-6 bg-border/50" />
+        <div className="hidden md:block w-px h-6 bg-border/50" />
 
         {/* Rarity group */}
-        <div className="flex items-center gap-0.5 p-1 rounded-xl bg-secondary/30 border border-border/50">
+        <div className="hidden md:flex items-center gap-0.5 p-1 rounded-xl bg-secondary/30 border border-border/50">
           {RARITIES.map((r) => {
             const conf = RARITY_CONFIG[r];
             return (
@@ -150,7 +150,7 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
         </div>
 
         {/* Position group */}
-        <div className="flex items-center gap-0.5 p-1 rounded-xl bg-secondary/30 border border-border/50">
+        <div className="hidden md:flex items-center gap-0.5 p-1 rounded-xl bg-secondary/30 border border-border/50">
           {POSITIONS.map((p) => (
             <button
               key={p.key}
@@ -173,7 +173,7 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
             key={t.key}
             onClick={() => setFilters({ tradeType: filters.tradeType === t.key ? null : t.key })}
             className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+              "hidden md:inline-flex px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
               filters.tradeType === t.key
                 ? "text-foreground font-semibold"
                 : "text-muted-foreground hover:text-foreground"
@@ -185,7 +185,7 @@ export function OfferFeed({ portfolio }: { portfolio: PortfolioIndex }) {
       </div>
 
       {/* Row 2: Sort + Min Sales + Stats */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border/50">
+      <div className="flex items-center gap-2 md:gap-3 px-3 py-2 md:px-4 border-b border-border/50 overflow-x-auto">
         <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
         {SORT_OPTIONS.map((s) => (
           <button

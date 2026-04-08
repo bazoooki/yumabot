@@ -95,6 +95,23 @@
   animation: shimmer 2s infinite;
 }
 
+/* Indeterminate progress bar */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.animate-indeterminate {
+  animation: indeterminate 1.8s ease-in-out infinite;
+}
+
 /* ── Route / page transition ── */
 @keyframes fadeIn {
   from {
@@ -193,6 +210,30 @@ body::before {
   pointer-events: none;
 }
 
+/* ── Mobile: touch-friendly scrolling ── */
+@media (pointer: coarse) {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* ── Mobile: hide grain texture on small screens ── */
+@media (max-width: 767px) {
+  body::before {
+    display: none;
+  }
+}
+
+/* ── Safe-area for bottom nav ── */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -209,4 +250,12 @@ body::before {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* ── Hide scrollbar on mobile for horizontal scroll areas ── */
+@media (max-width: 767px) {
+  ::-webkit-scrollbar {
+    width: 0px;
+    height: 0px;
+  }
 }

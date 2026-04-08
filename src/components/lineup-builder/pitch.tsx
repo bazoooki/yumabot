@@ -109,9 +109,9 @@ function ScoreHeader({
   const { setCurrentLevel } = useLineupStore();
 
   return (
-    <div className="px-4 py-3 border-b border-zinc-800/80">
+    <div className="px-3 py-2 md:px-4 md:py-3 border-b border-zinc-800/80">
       {/* Level selector + reward */}
-      <div className="flex items-center justify-between mb-2.5">
+      <div className="flex items-center justify-between mb-2 md:mb-2.5">
         <div className="flex items-center gap-1.5">
           {STREAK_LEVELS.map((lvl) => {
             const isActive = lvl.level === currentLevel;
@@ -257,9 +257,9 @@ export function Pitch({ cards }: { cards: SorareCard[] }) {
         <PitchMarkings />
 
         {/* Formation grid */}
-        <div className="relative z-10 flex flex-col items-center justify-center h-full gap-5 py-6">
+        <div className="relative z-10 flex flex-col items-center justify-center h-full gap-3 md:gap-5 py-3 md:py-6">
           {/* Top row: FWD + EX */}
-          <div className="flex items-center justify-center gap-5">
+          <div className="flex items-center justify-center gap-3 md:gap-5">
             {FORMATION.topRow.map(({ index, label }) => (
               <SlotCard
                 key={label}
@@ -271,7 +271,7 @@ export function Pitch({ cards }: { cards: SorareCard[] }) {
           </div>
 
           {/* Bottom row: DEF + GK + MID */}
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center gap-2 md:gap-4">
             {FORMATION.bottomRow.map(({ index, label }) => (
               <SlotCard
                 key={label}

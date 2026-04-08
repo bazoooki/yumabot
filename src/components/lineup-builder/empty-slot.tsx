@@ -56,7 +56,7 @@ export function EmptySlot({
     <button
       onClick={() => selectSlot(isSelected ? null : slotIndex)}
       className={cn(
-        "relative w-[136px] h-[180px] rounded-2xl transition-all duration-200 flex flex-col items-center justify-center gap-2.5",
+        "relative w-[100px] h-[130px] md:w-[136px] md:h-[180px] rounded-2xl transition-all duration-200 flex flex-col items-center justify-center gap-1.5 md:gap-2.5",
         isSelected
           ? "bg-purple-500/10 border-2 border-purple-400/70 shadow-lg shadow-purple-500/15"
           : cn(
@@ -70,7 +70,7 @@ export function EmptySlot({
       {/* Plus circle */}
       <div
         className={cn(
-          "w-10 h-10 rounded-full border-2 border-dashed flex items-center justify-center transition-all",
+          "w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-dashed flex items-center justify-center transition-all",
           isSelected
             ? "border-purple-400/60 bg-purple-500/15"
             : cn(accent.icon, "bg-transparent"),

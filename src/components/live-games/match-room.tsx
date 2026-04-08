@@ -22,7 +22,7 @@ interface Props {
 export function MatchRoom({ gameId, cards, userSlug }: Props) {
   const { game, isLoading, isLive, connected, updateCount, events: liveEvents } =
     useGameStream(gameId);
-  const [activeTab, setActiveTab] = useState<"lineups" | "stats" | "players">(
+  const [activeTab, setActiveTab] = useState<"lineups" | "stats" | "players" | "events" | "chat">(
     "lineups",
   );
   const [lineupPlayerSlugs, setLineupPlayerSlugs] = useState<Set<string> | null>(null);
@@ -136,17 +136,17 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex-1 p-6 space-y-4">
+      <div className="flex-1 p-4 md:p-6 space-y-4">
         {/* Header skeleton */}
-        <div className="flex items-center gap-4">
-          <Skeleton className="w-10 h-10 rounded-full" />
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="h-6 w-16" />
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="w-10 h-10 rounded-full" />
+        <div className="flex items-center gap-3 md:gap-4">
+          <Skeleton className="w-8 h-8 md:w-10 md:h-10 rounded-full" />
+          <Skeleton className="h-5 w-20 md:w-24" />
+          <Skeleton className="h-6 w-14 md:w-16" />
+          <Skeleton className="h-5 w-20 md:w-24" />
+          <Skeleton className="w-8 h-8 md:w-10 md:h-10 rounded-full" />
         </div>
         {/* Lineup skeleton */}
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
               <StatRowSkeleton key={i} />
@@ -171,9 +171,9 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
       {/* Left panel */}
-      <div className="w-[60%] border-r border-zinc-800 flex flex-col overflow-hidden">
+      <div className="flex-1 md:w-[60%] md:border-r border-zinc-800 flex flex-col overflow-hidden">
         <MatchHeader
           game={game}
           isLive={isLive}
@@ -182,13 +182,28 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
         />
 
         {/* Tabs */}
-        <div className="flex border-b border-zinc-800 shrink-0">
+        <div className="flex border-b border-zinc-800 shrink-0 overflow-x-auto">
           {(["lineups", "stats", "players"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "px-5 py-2.5 text-xs font-semibold capitalize transition-colors",
+                "px-3 py-2 md:px-5 md:py-2.5 text-xs font-semibold capitalize transition-colors shrink-0",
+                activeTab === tab
+                  ? "text-white border-b-2 border-white"
+                  : "text-zinc-500 hover:text-zinc-300",
+              )}
+            >
+              {tab}
+            </button>
+          ))}
+          {/* Mobile-only: Events + Chat tabs (right panel content on desktop) */}
+          {(["events", "chat"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "md:hidden px-3 py-2 text-xs font-semibold capitalize transition-colors shrink-0",
                 activeTab === tab
                   ? "text-white border-b-2 border-white"
                   : "text-zinc-500 hover:text-zinc-300",
@@ -219,6 +234,12 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
             </>
           ) : activeTab === "players" ? (
             <PlayersList game={game} myPlayerSlugs={myPlayerSlugs} />
+          ) : activeTab === "events" ? (
+            <EventsFeed events={events} variant={feedVariant} game={game} />
+          ) : activeTab === "chat" ? (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <MatchChat gameId={gameId} userSlug={userSlug} />
+            </div>
           ) : (
             <div className="flex-1 flex items-center justify-center py-20">
               <div className="text-center space-y-2">
@@ -232,7 +253,7 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
       </div>
 
       {/* Right panel — watching + feed (60%) + chat (40%) */}
-      <div className="w-[40%] flex flex-col overflow-hidden">
+      <div className="hidden md:flex md:w-[40%] flex-col overflow-hidden">
         {/* Watching indicator */}
         <div className="px-3 py-2.5 border-b border-zinc-800 shrink-0 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -305,8 +326,8 @@ function MatchHeader({
   const isScheduled = game.statusTyped === "scheduled";
 
   return (
-    <div className="bg-zinc-950 px-6 py-5 shrink-0 relative border-b border-zinc-800">
-      <div className="flex items-center justify-center gap-8">
+    <div className="bg-zinc-950 px-4 py-3 md:px-6 md:py-5 shrink-0 relative border-b border-zinc-800">
+      <div className="flex items-center justify-center gap-4 md:gap-8">
         {/* Home */}
         <div className="flex flex-col items-center gap-2 flex-1">
           <TeamLogo url={game.homeTeam.pictureUrl} code={game.homeTeam.code} size="lg" />
@@ -323,7 +344,7 @@ function MatchHeader({
             <p
               key={`${game.homeScore}-${game.awayScore}`}
               className={cn(
-                "text-4xl font-black text-white tabular-nums tracking-wider",
+                "text-3xl md:text-4xl font-black text-white tabular-nums tracking-wider",
                 isLive && "score-flash"
               )}
             >

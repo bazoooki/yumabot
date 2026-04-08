@@ -19,16 +19,16 @@ export function CompetitionSelector({
   ).length;
 
   return (
-    <div className="w-60 shrink-0 border-r border-zinc-800 flex flex-col overflow-hidden">
-      <div className="px-4 py-3 border-b border-zinc-800">
+    <div className="md:w-60 shrink-0 md:border-r border-b md:border-b-0 border-zinc-800 flex flex-col overflow-hidden">
+      <div className="px-3 py-2 md:px-4 md:py-3 md:border-b border-zinc-800 flex items-center gap-2 md:block">
         <div className="text-sm font-semibold text-zinc-300">
           {gameWeek ? `GW${gameWeek}` : "In Season"}
         </div>
-        <div className="text-[10px] text-zinc-600 mt-0.5">
+        <div className="text-[10px] text-zinc-600 md:mt-0.5">
           {filledCount}/{competitions.length} with lineups
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div className="flex md:flex-col flex-1 overflow-x-auto md:overflow-y-auto p-2 gap-1 md:gap-0 md:space-y-1">
         {competitions.map((comp) => (
           <CompetitionCard
             key={comp.slug}

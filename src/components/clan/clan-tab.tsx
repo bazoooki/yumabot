@@ -1,6 +1,7 @@
 "use client";
 
-import { Users, Loader2, RefreshCw, Check, X } from "lucide-react";
+import { useState } from "react";
+import { Users, Loader2, RefreshCw, Check, X, Sparkles } from "lucide-react";
 import { CLAN_MEMBERS } from "@/lib/clan/members";
 import { useClanPortfolios } from "@/lib/clan/use-clan-portfolios";
 import type { MemberLoadState } from "@/lib/clan/use-clan-portfolios";
@@ -141,21 +142,22 @@ function LoadingProgress({ memberStates }: { memberStates: MemberLoadState[] }) 
 
 export function ClanTab({ cards, userSlug }: { cards: SorareCard[]; userSlug: string }) {
   const { data: portfolios, isLoading, error, memberStates, refresh } = useClanPortfolios(userSlug);
+  const [aiOpen, setAiOpen] = useState(false);
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col flex-1 overflow-hidden relative">
       {/* Accent line */}
       <div className="h-px bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
 
       {/* Header */}
-      <div className="flex items-center gap-4 px-5 py-4 border-b border-border/50 bg-card/30">
+      <div className="flex flex-wrap items-center gap-3 md:gap-4 px-3 py-3 md:px-5 md:py-4 border-b border-border/50 bg-card/30">
         <div className="flex items-center gap-2.5">
           <Users className="w-5 h-5 text-violet-400" />
           <h2 className="text-base font-bold text-foreground">My Clan</h2>
         </div>
 
         {/* Member avatars with live status */}
-        <div className="flex -space-x-1.5">
+        <div className="flex -space-x-1.5 overflow-x-auto">
           {CLAN_MEMBERS.map((m) => {
             const state = memberStates.find((s) => s.slug === m.slug) ?? {
               slug: m.slug,
@@ -205,9 +207,9 @@ export function ClanTab({ cards, userSlug }: { cards: SorareCard[]; userSlug: st
       </div>
 
       {/* Main content: AI + Message Board */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* AI Assistant (main area) */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+        {/* AI Assistant (main area) — hidden on mobile, shown on desktop */}
+        <div className="hidden md:flex flex-1 flex-col overflow-hidden">
           <CommandBar activeTab="clan" cards={cards} />
 
           {/* Suggestions when loaded */}
@@ -243,16 +245,85 @@ export function ClanTab({ cards, userSlug }: { cards: SorareCard[]; userSlug: st
           {isLoading && <LoadingProgress memberStates={memberStates} />}
         </div>
 
-        {/* Right panel: Lineups + Message Board */}
-        <div className="w-[480px] shrink-0 flex flex-col overflow-hidden">
-          <div className="flex-[65] min-h-0 overflow-hidden">
-            <ClanLineupsPanel userSlug={userSlug} />
+        {/* Mobile: loading progress shown inline when loading */}
+        {isLoading && (
+          <div className="md:hidden flex-1">
+            <LoadingProgress memberStates={memberStates} />
           </div>
-          <div className="flex-[35] min-h-0 overflow-hidden">
-            <ClanMessageBoard userSlug={userSlug} />
+        )}
+
+        {/* Right panel: Lineups + Message Board — full width on mobile */}
+        {!isLoading && (
+          <div className="flex-1 md:flex-none md:w-[480px] shrink-0 flex flex-col overflow-hidden md:border-l border-border/50">
+            <div className="flex-[65] min-h-0 overflow-hidden">
+              <ClanLineupsPanel userSlug={userSlug} />
+            </div>
+            <div className="flex-[35] min-h-0 overflow-hidden">
+              <ClanMessageBoard userSlug={userSlug} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile: Floating AI bubble */}
+      <button
+        onClick={() => setAiOpen(true)}
+        className={cn(
+          "md:hidden fixed bottom-20 right-4 w-12 h-12 rounded-full flex items-center justify-center shadow-lg z-30 transition-all",
+          "bg-violet-600 text-white hover:bg-violet-500 shadow-violet-600/30 active:scale-95",
+        )}
+      >
+        <Sparkles className="w-5 h-5" />
+      </button>
+
+      {/* Mobile: AI overlay */}
+      {aiOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col bg-background">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-violet-400" />
+              <h3 className="text-sm font-bold text-foreground">Clan AI</h3>
+            </div>
+            <button
+              onClick={() => setAiOpen(false)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <CommandBar activeTab="clan" cards={cards} />
+
+            {portfolios && !isLoading && (
+              <div className="flex-1 flex flex-col items-center justify-center px-6 gap-5">
+                <div className="text-center space-y-2">
+                  <h3 className="text-base font-bold text-foreground">Clan AI Assistant</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Ask about your clan&apos;s cards, find trades, analyze lineups.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 w-full max-w-sm">
+                  {[
+                    "I need a FWD limited for Challenger",
+                    "Who has surplus rare midfielders?",
+                    "Show me Nimrodel's limited cards",
+                    "Find best GK trade for me",
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      className="text-left px-4 py-3 rounded-xl bg-secondary/20 border border-border/30 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-all"
+                    >
+                      &ldquo;{suggestion}&rdquo;
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

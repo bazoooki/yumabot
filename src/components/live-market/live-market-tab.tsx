@@ -138,12 +138,12 @@ export function LiveMarketTab({ cards, userSlug }: { cards: SorareCard[]; userSl
 
       <ConnectionStatus />
 
-      <div className="flex flex-1 overflow-hidden relative">
-        <div className="w-[60%] overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden relative">
+        <div className="flex-1 md:w-[60%] overflow-hidden">
           <OfferFeed portfolio={portfolio} />
         </div>
 
-        <div className="w-[40%] overflow-hidden relative">
+        <div className="hidden md:block md:w-[40%] overflow-hidden relative">
           <AlertPanel />
 
           {/* Chat bubble */}

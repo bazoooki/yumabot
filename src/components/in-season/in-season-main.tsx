@@ -68,10 +68,10 @@ function SlotCard({
         <img
           src={pictureUrl}
           alt={playerName ?? ""}
-          className="w-14 h-14 rounded-md object-cover mb-1"
+          className="w-12 h-12 md:w-14 md:h-14 rounded-md object-cover mb-1"
         />
       ) : (
-        <div className="w-14 h-14 rounded-md bg-zinc-800/50 flex items-center justify-center mb-1">
+        <div className="w-12 h-12 md:w-14 md:h-14 rounded-md bg-zinc-800/50 flex items-center justify-center mb-1">
           <span className="text-xs text-zinc-600 font-medium">{position}</span>
         </div>
       )}
@@ -115,18 +115,18 @@ export function InSeasonMain({
   const eligible = useEligibleCards(cards);
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
       {/* Left: lineup area */}
-      <div className="flex-1 overflow-y-auto p-6 min-w-0">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 min-w-0">
         {/* AI Command Bar */}
         <div className="mb-4">
           <CommandBar activeTab="in-season" cards={cards} />
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-100">
+            <h2 className="text-base md:text-lg font-semibold text-zinc-100">
               {comp.leagueName}
             </h2>
             <div className="flex items-center gap-3 mt-1">
@@ -175,7 +175,7 @@ export function InSeasonMain({
         )}
 
         {/* Lineup slots */}
-        <div className="grid grid-cols-5 gap-3 mb-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 md:gap-3 mb-2">
           {(["GK", "DEF", "MID", "FWD", "EX"] as const).map((pos, i) => (
             <SlotCard key={pos} position={pos} index={i} comp={comp} />
           ))}
@@ -214,7 +214,7 @@ export function InSeasonMain({
       </div>
 
       {/* Right: card picker */}
-      <div className="w-80 xl:w-96 shrink-0">
+      <div className="md:w-80 xl:w-96 shrink-0 border-t md:border-t-0 border-zinc-800">
         <InSeasonCardPicker cards={cards} />
       </div>
     </div>

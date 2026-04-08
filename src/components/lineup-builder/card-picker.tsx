@@ -196,7 +196,7 @@ export function CardPicker({ cards }: CardPickerProps) {
         </div>
 
         {/* Card Filters */}
-        <div className="px-4 py-3 border-b border-zinc-800 space-y-2.5 shrink-0">
+        <div className="px-3 py-2 md:px-4 md:py-3 border-b border-zinc-800 space-y-2 md:space-y-2.5 shrink-0">
           {/* Rarity + Sort + View in one row */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
@@ -301,7 +301,7 @@ export function CardPicker({ cards }: CardPickerProps) {
                 </div>
                 <div className={cn(
                   viewMode === "grid"
-                    ? "grid grid-cols-4 xl:grid-cols-5 gap-2 mb-4"
+                    ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2 mb-4"
                     : "space-y-2 mb-4"
                 )}>
                   {group.items.map((sc) => renderCard(sc))}
@@ -312,7 +312,7 @@ export function CardPicker({ cards }: CardPickerProps) {
             // Flat rendering for other sorts
             <div className={cn(
               viewMode === "grid"
-                ? "grid grid-cols-4 xl:grid-cols-5 gap-2"
+                ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2"
                 : "space-y-2"
             )}>
               {filteredCards.map((sc) => renderCard(sc))}

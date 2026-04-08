@@ -53,7 +53,7 @@ export const CommandBarInput = forwardRef<HTMLInputElement, Props>(
     return (
       <div
         className={cn(
-          "flex items-center gap-3 px-4 py-2.5",
+          "flex items-center gap-2 md:gap-3 px-3 py-2 md:px-4 md:py-2.5",
           showSeparator && "border-t border-zinc-800/30",
         )}
       >
@@ -81,7 +81,7 @@ export const CommandBarInput = forwardRef<HTMLInputElement, Props>(
         ) : (
           <>
             <CommandBarHelp activeTab={activeTab} onSelect={onSuggestion} />
-            <kbd className="text-[10px] text-zinc-600 bg-zinc-800 rounded px-1.5 py-0.5 font-mono border border-zinc-700/50 shrink-0">
+            <kbd className="hidden md:inline text-[10px] text-zinc-600 bg-zinc-800 rounded px-1.5 py-0.5 font-mono border border-zinc-700/50 shrink-0">
               {typeof navigator !== "undefined" &&
               navigator.platform?.includes("Mac")
                 ? "⌘K"

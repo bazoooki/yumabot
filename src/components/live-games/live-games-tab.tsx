@@ -27,7 +27,7 @@ export function LiveGamesTab({ cards }: Props) {
       <div className="h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
 
       {/* Header */}
-      <div className="px-6 py-3 border-b border-zinc-800 flex items-center gap-3 shrink-0">
+      <div className="px-3 py-2 md:px-6 md:py-3 border-b border-zinc-800 flex items-center gap-3 shrink-0">
         <Tv className="w-4 h-4 text-cyan-400" />
         <h2 className="text-sm font-semibold text-zinc-200">Live Games</h2>
       </div>

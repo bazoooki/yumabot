@@ -100,7 +100,7 @@ export function PlayerRow({
     )}>
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/30 transition-all duration-200 cursor-pointer text-left"
+        className="w-full flex items-center gap-2 md:gap-3 px-3 py-3 md:px-4 hover:bg-secondary/30 transition-all duration-200 cursor-pointer text-left min-h-[44px]"
       >
         <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", rarityConf.dotColor)} />
 
@@ -167,11 +167,11 @@ export function PlayerRow({
           <span className="text-[10px] text-muted-foreground">ETH</span>
         </div>
 
-        <span className="text-[10px] text-muted-foreground shrink-0 w-8 text-right tabular-nums">
+        <span className="hidden sm:inline text-[10px] text-muted-foreground shrink-0 w-8 text-right tabular-nums">
           {timeAgo(player.lastSeen)}
         </span>
         <ChevronDown className={cn(
-          "w-4 h-4 text-muted-foreground transition-transform duration-200 shrink-0",
+          "w-4 h-4 text-muted-foreground transition-transform duration-200 shrink-0 hidden sm:block",
           isExpanded && "rotate-180",
         )} />
       </button>

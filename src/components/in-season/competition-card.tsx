@@ -22,7 +22,7 @@ export function CompetitionCard({
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-3 py-2.5 rounded-lg transition-all",
+        "w-full shrink-0 md:shrink text-left px-3 py-2.5 rounded-lg transition-all min-w-[160px] md:min-w-0",
         isSelected
           ? "bg-amber-500/10 border border-amber-500/30"
           : "hover:bg-zinc-800/50 border border-transparent",

@@ -59,7 +59,7 @@ export function FilledSlot({
     <>
       <div
         className={cn(
-          "relative w-[136px] h-[180px] rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer select-none",
+          "relative w-[100px] h-[130px] md:w-[136px] md:h-[180px] rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer select-none",
           isCaptain
             ? "ring-2 ring-amber-400/70 shadow-lg shadow-amber-500/15"
             : isUnavailable
@@ -76,7 +76,7 @@ export function FilledSlot({
           alt={player.displayName}
           fill
           className="object-cover object-[center_18%] scale-[1.15]"
-          sizes="136px"
+          sizes="(max-width: 768px) 100px, 136px"
         />
 
         {/* Unavailable red tint */}

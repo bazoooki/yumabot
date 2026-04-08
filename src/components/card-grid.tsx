@@ -12,7 +12,7 @@ interface CardGridProps {
 export function CardGrid({ cards, isLoading }: CardGridProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3">
         {Array.from({ length: 10 }).map((_, i) => (
           <CardSkeleton key={i} />
         ))}
@@ -34,7 +34,7 @@ export function CardGrid({ cards, isLoading }: CardGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 content-ready">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3 content-ready">
       {cards.map((card, i) => (
         <div
           key={card.slug}
@@ -50,7 +50,7 @@ export function CardGrid({ cards, isLoading }: CardGridProps) {
 
 export function CardGridSkeleton() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3">
       {Array.from({ length: 15 }).map((_, i) => (
         <div key={i} className="rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800">
           <div className="aspect-[3/4] bg-zinc-800 animate-pulse" />

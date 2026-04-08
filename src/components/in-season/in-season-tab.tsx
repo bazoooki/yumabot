@@ -75,7 +75,7 @@ export function InSeasonTab({
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Fixture mode tabs */}
-      <div className="border-b border-zinc-800 px-6 flex items-center gap-1 shrink-0">
+      <div className="border-b border-zinc-800 px-3 md:px-6 flex items-center gap-1 shrink-0">
         {([
           { key: "UPCOMING" as const, label: "Next GW" },
           { key: "LIVE" as const, label: "Current GW" },
@@ -105,20 +105,20 @@ export function InSeasonTab({
       {error ? (
         <QueryError error={error instanceof Error ? error : new Error("Failed to load in-season data")} retry={() => void refetch()} />
       ) : isLoading ? (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Sidebar skeleton */}
-          <div className="w-64 border-r border-zinc-800 p-4 space-y-3">
+          <div className="flex md:flex-col md:w-64 md:border-r border-b md:border-b-0 border-zinc-800 p-3 md:p-4 gap-2 md:gap-0 md:space-y-3 overflow-x-auto md:overflow-y-auto">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="p-3 rounded-xl bg-zinc-900 space-y-2">
+              <div key={i} className="p-3 rounded-xl bg-zinc-900 space-y-2 shrink-0 min-w-[140px] md:min-w-0">
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-1/2" />
               </div>
             ))}
           </div>
           {/* Main content skeleton */}
-          <div className="flex-1 p-6 space-y-4">
+          <div className="flex-1 p-4 md:p-6 space-y-4">
             <Skeleton className="h-6 w-48" />
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-20 rounded-xl" />
               ))}
@@ -135,7 +135,7 @@ export function InSeasonTab({
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           <CompetitionSelector
             competitions={competitions}
             gameWeek={data?.gameWeek ?? null}

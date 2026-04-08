@@ -150,7 +150,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="px-6 py-5 space-y-5">
+      <div className="px-3 py-4 md:px-6 md:py-5 space-y-4 md:space-y-5">
 
         {/* ── Section 0: My Live Lineups ── */}
         {(liveLineups.length > 0 || lineupsLoading) && (
@@ -185,7 +185,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
         )}
 
         {/* ── Section 1: Compact Status Bar ── */}
-        <div className="flex items-center gap-4 px-5 py-3 rounded-xl bg-zinc-900/80 border border-zinc-800">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4 px-3 py-2.5 md:px-5 md:py-3 rounded-xl bg-zinc-900/80 border border-zinc-800">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-xs font-bold text-purple-400">
               Lv.{currentLevel}
@@ -225,10 +225,10 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
         </div>
 
         {/* ── Section 2: Quick Links ── */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
           <button
             onClick={() => onNavigate("lineup")}
-            className="group p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-purple-500/30 transition-all text-left"
+            className="group p-3 md:p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-purple-500/30 transition-all text-left"
           >
             <Target className="w-5 h-5 text-purple-400 mb-2" />
             <p className="text-sm font-semibold text-white">Lineup</p>
@@ -238,7 +238,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
           </button>
           <button
             onClick={() => onNavigate("live-games")}
-            className="group p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-cyan-500/30 transition-all text-left"
+            className="group p-3 md:p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-cyan-500/30 transition-all text-left"
           >
             <Tv className="w-5 h-5 text-cyan-400 mb-2" />
             <p className="text-sm font-semibold text-white">Live Games</p>
@@ -249,7 +249,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
           </button>
           <button
             onClick={() => onNavigate("market")}
-            className="group p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-green-500/30 transition-all text-left"
+            className="group p-3 md:p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-green-500/30 transition-all text-left"
           >
             <TrendingUp className="w-5 h-5 text-green-400 mb-2" />
             <p className="text-sm font-semibold text-white">Market</p>
@@ -260,7 +260,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
           </button>
           <button
             onClick={() => onNavigate("in-season")}
-            className="group p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/30 transition-all text-left"
+            className="group p-3 md:p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/30 transition-all text-left"
           >
             <Trophy className="w-5 h-5 text-amber-400 mb-2" />
             <p className="text-sm font-semibold text-white">In Season</p>
@@ -271,9 +271,9 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
         </div>
 
         {/* ── Section 3: Current Lineup + My Live Players ── */}
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
           {/* Current Lineup */}
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-5">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 md:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Target className="w-4 h-4 text-purple-400" />
               <h2 className="text-sm font-bold text-white">Current Lineup</h2>
@@ -349,7 +349,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
           </div>
 
           {/* My Live Players */}
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-5">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 md:p-5">
             <div className="flex items-center gap-2 mb-4">
               {myLivePlayers.length > 0 && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
               <Zap className="w-4 h-4 text-green-400" />
@@ -385,7 +385,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
 
         {/* ── Section 4: My Games ── */}
         {(myLiveGames.length > 0 || myUpcomingGames.length > 0) && (
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-5">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 md:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Tv className="w-4 h-4 text-cyan-400" />
               <h2 className="text-sm font-bold text-white">My Games</h2>
@@ -429,9 +429,9 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
         )}
 
         {/* ── Section 5: Market Pulse + Upcoming Games ── */}
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
           {/* Market Pulse */}
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-5">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 md:p-5">
             <div className="flex items-center gap-2 mb-4">
               <span className={cn(
                 "w-2 h-2 rounded-full",
@@ -474,7 +474,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
           </div>
 
           {/* Upcoming Games */}
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-5">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 md:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-4 h-4 text-blue-400" />
               <h2 className="text-sm font-bold text-white">Upcoming</h2>

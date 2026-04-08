@@ -26,10 +26,10 @@ export function Header({ userSlug, onUserChange }: HeaderProps) {
   };
 
   return (
-    <header className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-      <h1 className="text-xl font-bold text-white">YumaBot</h1>
+    <header className="flex items-center justify-between px-3 py-2 md:px-6 md:py-4 border-b border-zinc-800">
+      <h1 className="text-base md:text-xl font-bold text-white">YumaBot</h1>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 md:gap-3">
         <Dialog.Root open={settingsOpen} onOpenChange={(open) => { setSettingsOpen(open); if (open) setSlugInput(userSlug); }}>
           <Dialog.Trigger asChild>
             <button className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
@@ -38,7 +38,7 @@ export function Header({ userSlug, onUserChange }: HeaderProps) {
           </Dialog.Trigger>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
-            <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 p-6 focus:outline-none">
+            <Dialog.Content className="fixed inset-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 w-full md:w-[400px] bg-zinc-900 md:border md:border-zinc-700 md:rounded-xl shadow-2xl z-50 p-6 focus:outline-none">
               <Dialog.Title className="text-lg font-bold text-white mb-1">Settings</Dialog.Title>
               <Dialog.Description className="text-sm text-zinc-500 mb-5">Configure your YumaBot preferences</Dialog.Description>
 
@@ -89,14 +89,14 @@ export function Header({ userSlug, onUserChange }: HeaderProps) {
         <button className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
           <Bell className="w-5 h-5" />
         </button>
-        <button className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+        <button className="flex items-center gap-2 pl-2 pr-1.5 md:pr-3 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
+          <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-[10px] md:text-xs font-bold">
             {userSlug.slice(0, 2).toUpperCase()}
           </div>
-          <span className="text-sm font-medium text-white capitalize">
+          <span className="hidden md:inline text-sm font-medium text-white capitalize">
             {userSlug.replace(/-/g, ".")}
           </span>
-          <ChevronDown className="w-4 h-4 text-zinc-400" />
+          <ChevronDown className="hidden md:block w-4 h-4 text-zinc-400" />
         </button>
       </div>
     </header>

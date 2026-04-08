@@ -106,7 +106,7 @@ export function PlayerModal({ card, open, onOpenChange }: PlayerModalProps) {
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] max-h-[85vh] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-y-auto focus:outline-none">
+        <Dialog.Content className="fixed inset-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 w-full md:w-[480px] max-h-full md:max-h-[85vh] bg-zinc-900 md:border md:border-zinc-700 md:rounded-xl shadow-2xl z-50 overflow-y-auto focus:outline-none">
           <Dialog.Title className="sr-only">{player.displayName} — Player Details</Dialog.Title>
 
           {/* Header */}

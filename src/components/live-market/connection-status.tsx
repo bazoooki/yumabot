@@ -13,7 +13,7 @@ export function ConnectionStatus() {
   const isConnecting = connectionStatus === "connecting";
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 bg-card/30">
+    <div className="flex flex-wrap items-center gap-2 md:gap-3 px-3 py-2 md:px-4 md:py-2.5 border-b border-border/50 bg-card/30">
       {/* Status pill */}
       <div className={cn(
         "flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300",
@@ -61,7 +61,7 @@ export function ConnectionStatus() {
       </div>
 
       {/* Min sales stepper */}
-      <div className="flex items-center gap-1.5">
+      <div className="hidden md:flex items-center gap-1.5">
         <span className="text-xs text-muted-foreground">show min</span>
         <div className="flex items-center rounded-lg bg-secondary/30 border border-border/50">
           <button
