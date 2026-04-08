@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Loader2, Wifi, WifiOff, BarChart3, Clock, Zap, MessageCircle, X } from "lucide-react";
 import { useGameStream } from "@/lib/hooks/use-game-stream";
 import { extractGoalScorers, getStatLabel } from "@/lib/game-events";
+import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import type { SorareCard, GameDetail, GamePlayerScore, GameEvent } from "@/lib/types";
+import type { RoomMessage } from "@/lib/rooms/types";
 
 const NON_COMMON_RARITIES = new Set(["limited", "rare", "super_rare", "unique", "custom_series"]);
 const RARITY_RANK: Record<string, number> = { unique: 5, super_rare: 4, rare: 3, limited: 2, custom_series: 1 };
@@ -26,6 +28,32 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
   const [lineupPlayerSlugs, setLineupPlayerSlugs] = useState<Set<string> | null>(null);
   const feedVariant = 8;
   const events = liveEvents;
+  const [watchers, setWatchers] = useState<{ slug: string }[]>([]);
+
+  // Presence tracking — who's watching this game
+  useEffect(() => {
+    const channel = supabase.channel(`game-presence-${gameId}`, {
+      config: { presence: { key: userSlug } },
+    });
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState<{ slug: string }>();
+        const users = Object.values(state)
+          .flat()
+          .map((p) => ({ slug: p.slug }));
+        setWatchers(users);
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await channel.track({ slug: userSlug });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId, userSlug]);
 
   // Fetch user's active lineup to know which cards are actually in play
   useEffect(() => {
@@ -177,11 +205,26 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold">Watching</span>
             <div className="flex -space-x-1.5">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-zinc-900">
-                {userSlug.slice(0, 2).toUpperCase()}
-              </div>
+              {(watchers.length > 0 ? watchers : [{ slug: userSlug }]).map((w) => (
+                <div
+                  key={w.slug}
+                  title={w.slug.replace(/-/g, " ")}
+                  className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-zinc-900",
+                    w.slug === userSlug
+                      ? "bg-gradient-to-br from-purple-500 to-purple-700"
+                      : "bg-gradient-to-br from-cyan-500 to-cyan-700",
+                  )}
+                >
+                  {w.slug.slice(0, 2).toUpperCase()}
+                </div>
+              ))}
             </div>
-            <span className="text-[11px] text-zinc-400 font-medium">{userSlug.replace(/-/g, " ")}</span>
+            <span className="text-[11px] text-zinc-400 font-medium">
+              {watchers.length > 1
+                ? `${watchers.length} viewers`
+                : userSlug.replace(/-/g, " ")}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -218,7 +261,7 @@ export function MatchRoom({ gameId, cards, userSlug }: Props) {
             <div className="px-3 py-2 border-b border-zinc-800 shrink-0 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-zinc-300">Chat</h3>
             </div>
-            <MatchChat gameId={gameId} />
+            <MatchChat gameId={gameId} userSlug={userSlug} />
           </div>
         )}
       </div>
@@ -1017,35 +1060,105 @@ function ExpandableEventRow({
 
 // ─── Match Chat ───
 
-function MatchChat({ gameId }: { gameId: string }) {
-  const [messages, setMessages] = useState<Array<{ author: string; text: string; time: string }>>([]);
+function MatchChat({ gameId, userSlug }: { gameId: string; userSlug: string }) {
+  const roomId = `game-${gameId}`;
+  const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      { author: "You", text: input.trim(), time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
-    ]);
+  // Load initial messages
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from("room_messages")
+        .select("*")
+        .eq("room_id", roomId)
+        .order("created_at", { ascending: true })
+        .limit(100);
+      if (data) setMessages(data as RoomMessage[]);
+    }
+    load();
+  }, [roomId]);
+
+  // Subscribe to new messages
+  useEffect(() => {
+    const channel = supabase
+      .channel(`room-messages-${roomId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "room_messages",
+          filter: `room_id=eq.${roomId}`,
+        },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as RoomMessage]);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [roomId]);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length]);
+
+  async function sendChat() {
+    const text = input.trim();
+    if (!text || isSending) return;
     setInput("");
-  };
+    setIsSending(true);
+
+    await supabase.from("room_messages").insert({
+      room_id: roomId,
+      author: userSlug,
+      message: text,
+      message_type: "chat",
+      metadata: {},
+    });
+
+    setIsSending(false);
+  }
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-2.5 py-2 space-y-1.5">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-2.5 py-2 space-y-1.5">
         {messages.length === 0 ? (
           <p className="text-[10px] text-zinc-600 text-center mt-8">
             No messages yet
           </p>
         ) : (
-          messages.map((msg, i) => (
-            <div key={i}>
+          messages.map((msg) => (
+            <div key={msg.id}>
               <p className="text-[10px]">
-                <span className="font-semibold text-primary">{msg.author}</span>
-                <span className="text-zinc-600 ml-1">{msg.time}</span>
+                <span
+                  className={cn(
+                    "font-semibold",
+                    msg.author === userSlug ? "text-purple-400" : "text-primary",
+                  )}
+                >
+                  {msg.author.replace(/-/g, " ")}
+                </span>
+                {msg.author === userSlug && (
+                  <span className="text-zinc-600 ml-1">(You)</span>
+                )}
+                <span className="text-zinc-600 ml-1">
+                  {new Date(msg.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
               </p>
-              <p className="text-[11px] text-zinc-300">{msg.text}</p>
+              <p className="text-[11px] text-zinc-300">{msg.message}</p>
             </div>
           ))
         )}
@@ -1058,13 +1171,13 @@ function MatchChat({ gameId }: { gameId: string }) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            onKeyDown={(e) => e.key === "Enter" && sendChat()}
             placeholder="Say something..."
             className="flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-md px-2 py-1 text-[11px] text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600"
           />
           <button
-            onClick={sendMessage}
-            disabled={!input.trim()}
+            onClick={sendChat}
+            disabled={!input.trim() || isSending}
             className="text-primary hover:text-primary/80 disabled:text-zinc-700 transition-colors"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
