@@ -8,6 +8,7 @@ import {
 } from "@/lib/queries";
 import { sleep } from "@/lib/rate-limiter";
 import { shouldScrapeLeaderboard } from "@/lib/results/leaderboard-filter";
+import { recomputeAllForGW } from "@/lib/results/compute-and-cache";
 
 interface LeaderboardMeta {
   slug: string;
@@ -170,6 +171,11 @@ export async function POST(request: Request) {
       );
 
       await sleep(DELAY_MS);
+    }
+
+    // Recompute after scrape
+    if (fetched > 0) {
+      await recomputeAllForGW(fixture.gameWeek);
     }
 
     return NextResponse.json({

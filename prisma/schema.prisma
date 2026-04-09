@@ -170,3 +170,12 @@ model LeaderboardResult {
   @@index([gameWeek, division])
   @@index([mainRarityType, gameWeek])
 }
+
+model ComputedResults {
+  id                    Int      @id @default(autoincrement())
+  key                   String   @unique   // "achievements:671", "power-rankings:671", "power-rankings:all"
+  dataJson              String              // pre-computed JSON result
+  computedAt            DateTime @default(now())
+
+  @@index([key])
+}

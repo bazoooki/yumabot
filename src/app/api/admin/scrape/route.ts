@@ -7,6 +7,7 @@ import {
 } from "@/lib/queries";
 import { sleep } from "@/lib/rate-limiter";
 import { shouldScrapeLeaderboard } from "@/lib/results/leaderboard-filter";
+import { recomputeAllForGW } from "@/lib/results/compute-and-cache";
 
 interface LeaderboardMeta {
   slug: string;
@@ -195,6 +196,13 @@ export async function POST(request: Request) {
           });
 
           await sleep(DELAY_MS);
+        }
+
+        // Recompute achievements + power rankings
+        if (completed > 0) {
+          send({ type: "status", message: "Computing achievements & power rankings..." });
+          await recomputeAllForGW(fixture.gameWeek);
+          send({ type: "status", message: "Computation complete" });
         }
 
         send({
