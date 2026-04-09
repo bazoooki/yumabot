@@ -9,6 +9,7 @@ import type { SorareCard, InSeasonCompetition } from "@/lib/types";
 import { useInSeasonStore, useSelectedCompetition } from "@/lib/in-season-store";
 import { CompetitionSelector } from "./competition-selector";
 import { InSeasonMain } from "./in-season-main";
+import { GWPlanner } from "./gw-planner";
 import { cn } from "@/lib/utils";
 
 type FixtureMode = "UPCOMING" | "LIVE";
@@ -46,6 +47,8 @@ export function InSeasonTab({
   const setCompetitions = useInSeasonStore((s) => s.setCompetitions);
   const competitions = useInSeasonStore((s) => s.competitions);
   const selected = useSelectedCompetition();
+  const plannerMode = useInSeasonStore((s) => s.plannerMode);
+  const setPlannerMode = useInSeasonStore((s) => s.setPlannerMode);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["in-season-competitions", userSlug, fixtureMode],
@@ -99,6 +102,29 @@ export function InSeasonTab({
         {isLoading && (
           <Skeleton className="w-3.5 h-3.5 rounded-full ml-2" />
         )}
+
+        {/* Builder / Planner toggle */}
+        {competitions.length > 0 && (
+          <div className="ml-auto flex items-center gap-0.5 bg-zinc-900 rounded-md p-0.5">
+            {([
+              { key: false, label: "Builder" },
+              { key: true, label: "Planner" },
+            ] as const).map((mode) => (
+              <button
+                key={String(mode.key)}
+                onClick={() => setPlannerMode(mode.key)}
+                className={cn(
+                  "px-2.5 py-1 text-[11px] font-medium rounded transition-colors",
+                  plannerMode === mode.key
+                    ? "bg-zinc-700 text-zinc-200"
+                    : "text-zinc-500 hover:text-zinc-300",
+                )}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -134,6 +160,12 @@ export function InSeasonTab({
             </p>
           </div>
         </div>
+      ) : plannerMode ? (
+        <GWPlanner
+          competitions={competitions}
+          cards={cards}
+          gameWeek={data?.gameWeek ?? null}
+        />
       ) : (
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           <CompetitionSelector

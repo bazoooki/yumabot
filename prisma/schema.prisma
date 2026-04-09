@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,37 +8,45 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model Settings {
-  id        Int      @id @default(1)
-  userSlug  String   @default("ba-zii")
-  updatedAt DateTime @updatedAt
-}
-
-model SavedLineup {
-  id        Int      @id @default(autoincrement())
-  name      String   @default("Default")
-  level     Int
-  slots     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model CardCache {
   id        Int      @id @default(autoincrement())
   userSlug  String   @unique
-  cardsJson String   // Full JSON blob of cards array
+  cardsJson String
   cardCount Int
   fetchedAt DateTime @default(now())
 }
 
-model StreakHistory {
-  id          Int      @id @default(autoincrement())
-  level       Int
-  threshold   Int
-  actualScore Int
-  success     Boolean
-  reward      String
-  playedAt    DateTime @default(now())
+model CardStateEvent {
+  id            Int      @id @default(autoincrement())
+  cardSlug      String
+  playerSlug    String
+  playerName    String
+  rarity        String
+  onSale        Boolean
+  inLineup      Boolean
+  ownerSlug     String?
+  lineupDetails String?
+  receivedAt    DateTime @default(now())
+
+  @@index([cardSlug, receivedAt])
+  @@index([playerSlug, receivedAt])
+  @@index([receivedAt])
+}
+
+model MarketAlert {
+  id           Int      @id @default(autoincrement())
+  ruleType     String
+  severity     String
+  playerSlug   String?
+  playerName   String?
+  title        String
+  description  String
+  metadata     String   @default("{}")
+  acknowledged Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([playerSlug, createdAt])
 }
 
 model MarketOffer {
@@ -62,25 +67,9 @@ model MarketOffer {
   dealStatus  String?
   receivedAt  DateTime @default(now())
 
+  @@index([buyerSlug, receivedAt])
   @@index([playerSlug, receivedAt])
   @@index([receivedAt])
-  @@index([buyerSlug, receivedAt])
-}
-
-model MarketAlert {
-  id            Int      @id @default(autoincrement())
-  ruleType      String
-  severity      String
-  playerSlug    String?
-  playerName    String?
-  title         String
-  description   String
-  metadata      String   @default("{}")
-  acknowledged  Boolean  @default(false)
-  createdAt     DateTime @default(now())
-
-  @@index([createdAt])
-  @@index([playerSlug, createdAt])
 }
 
 model OfferLifecycleEvent {
@@ -95,24 +84,89 @@ model OfferLifecycleEvent {
   cardSlug         String?
   receivedAt       DateTime @default(now())
 
+  @@index([offerId])
   @@index([playerSlug, receivedAt])
   @@index([receivedAt])
-  @@index([offerId])
 }
 
-model CardStateEvent {
-  id            Int      @id @default(autoincrement())
-  cardSlug      String
-  playerSlug    String
-  playerName    String
-  rarity        String
-  onSale        Boolean
-  inLineup      Boolean
-  ownerSlug     String?
-  lineupDetails String?
-  receivedAt    DateTime @default(now())
+model SavedLineup {
+  id        Int      @id @default(autoincrement())
+  name      String   @default("Default")
+  level     Int
+  slots     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 
-  @@index([playerSlug, receivedAt])
-  @@index([cardSlug, receivedAt])
-  @@index([receivedAt])
+model Settings {
+  id        Int      @id @default(1)
+  userSlug  String   @default("ba-zii")
+  updatedAt DateTime @updatedAt
+}
+
+model StreakHistory {
+  id          Int      @id @default(autoincrement())
+  level       Int
+  threshold   Int
+  actualScore Int
+  success     Boolean
+  reward      String
+  playedAt    DateTime @default(now())
+}
+
+model game_collector_state {
+  game_id      String    @id
+  status       String    @default("tracking")
+  last_poll_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model game_events {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  game_id            String
+  player_slug        String
+  player_name        String
+  team_code          String?   @default("")
+  minute             Int?      @default(0)
+  stat               String
+  category           String    @default("all_around")
+  points_delta       Float?    @default(0)
+  new_value          Float?    @default(0)
+  player_total_score Float?    @default(0)
+  timestamp          BigInt    @default(0)
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([game_id, created_at], map: "idx_game_events_game_id")
+  @@index([player_slug], map: "idx_game_events_player")
+}
+
+model room_messages {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id      String
+  author       String
+  message      String
+  message_type String    @default("chat")
+  metadata     Json?     @default("{}")
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([room_id, created_at], map: "idx_messages_room")
+}
+
+model LeaderboardResult {
+  id               Int      @id @default(autoincrement())
+  fixtureSlug      String
+  gameWeek         Int
+  leaderboardSlug  String   @unique
+  leaderboardName  String
+  leagueSlug       String
+  leagueName       String
+  division         Int
+  mainRarityType   String
+  totalEntries     Int
+  rankingsJson     String
+  fetchedAt        DateTime @default(now())
+
+  @@index([gameWeek])
+  @@index([gameWeek, division])
+  @@index([mainRarityType, gameWeek])
 }

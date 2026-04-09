@@ -7,7 +7,8 @@ import { Skeleton, StatRowSkeleton } from "@/components/ui/skeleton";
 import { extractGoalScorers, getStatLabel } from "@/lib/game-events";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import type { SorareCard, GameDetail, GamePlayerScore, GameEvent } from "@/lib/types";
+import type { SorareCard, GameDetail, GamePlayerScore, GameEvent, FeedItem, BatchedGameEvent } from "@/lib/types";
+import { isBatchedEvent } from "@/lib/types";
 import type { RoomMessage } from "@/lib/rooms/types";
 
 const NON_COMMON_RARITIES = new Set(["limited", "rare", "super_rare", "unique", "custom_series"]);
@@ -759,11 +760,182 @@ function GoalScorersLine({ game }: { game: GameDetail }) {
   );
 }
 
+// ─── Batched Impact Card ───
+
+function BatchedEventCard({
+  batch,
+  game,
+}: {
+  batch: BatchedGameEvent;
+  game?: GameDetail | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { trigger, relatedTriggers, affected } = batch;
+  const { icon: triggerIcon } = getStatLabel(trigger.stat);
+
+  const isGoal =
+    trigger.stat === "goal" ||
+    trigger.stat === "goals" ||
+    trigger.stat === "own_goal";
+  const isRed = trigger.stat === "red_card";
+
+  const accentColor = isGoal
+    ? "from-green-500/20 via-green-500/5"
+    : isRed
+      ? "from-red-500/20 via-red-500/5"
+      : "from-amber-500/20 via-amber-500/5";
+  const borderColor = isGoal
+    ? "border-green-500/30"
+    : isRed
+      ? "border-red-500/30"
+      : "border-amber-500/30";
+  const textAccent = isGoal
+    ? "text-green-400"
+    : isRed
+      ? "text-red-400"
+      : "text-amber-400";
+
+  // Total affected players count
+  const allAffected = [...relatedTriggers, ...affected];
+  const totalDelta = allAffected.reduce((sum, e) => sum + e.pointsDelta, 0);
+
+  return (
+    <div className={cn("border-b-2", borderColor)}>
+      {/* Headline — always visible */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className={cn(
+          "w-full text-left px-4 py-3 bg-gradient-to-r to-transparent transition-colors hover:brightness-110",
+          accentColor,
+        )}
+      >
+        <div className="flex items-center gap-3">
+          {/* Big icon */}
+          <div className="text-2xl shrink-0">{triggerIcon}</div>
+
+          {/* Main info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-white">
+                {isGoal ? "GOAL" : isRed ? "RED CARD" : getStatLabel(trigger.stat).label.toUpperCase()}
+              </span>
+              <span className="text-xs text-zinc-400">{trigger.minute}&apos;</span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={cn("text-sm font-semibold", textAccent)}>
+                {trigger.playerName}
+              </span>
+              <span className="text-[10px] text-zinc-500">
+                {trigger.teamCode}
+              </span>
+              {trigger.isOwned && (
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+              )}
+              <span className={cn(
+                "text-xs font-bold tabular-nums",
+                trigger.pointsDelta > 0 ? "text-green-400" : "text-red-400",
+              )}>
+                {trigger.pointsDelta > 0 ? "+" : ""}{trigger.pointsDelta}
+              </span>
+            </div>
+          </div>
+
+          {/* Summary badge */}
+          <div className="shrink-0 text-right">
+            {allAffected.length > 0 && (
+              <span className="text-[10px] text-zinc-500">
+                {allAffected.length} player{allAffected.length !== 1 ? "s" : ""} affected
+              </span>
+            )}
+            <span className={cn(
+              "text-[10px] text-zinc-600 block transition-transform",
+              expanded && "rotate-180",
+            )}>
+              ▾
+            </span>
+          </div>
+        </div>
+
+        {/* Related triggers inline (e.g. assist) */}
+        {relatedTriggers.length > 0 && (
+          <div className="flex items-center gap-2 mt-1.5 ml-9">
+            {relatedTriggers.map((rt) => {
+              const { icon: rtIcon } = getStatLabel(rt.stat);
+              return (
+                <span
+                  key={`${rt.playerSlug}-${rt.stat}`}
+                  className="flex items-center gap-1 text-[11px] text-zinc-300"
+                >
+                  <span>{rtIcon}</span>
+                  <span className="font-semibold">{rt.playerName.split(" ").pop()}</span>
+                  <span className={cn(
+                    "font-bold tabular-nums",
+                    rt.pointsDelta > 0 ? "text-green-400" : "text-red-400",
+                  )}>
+                    {rt.pointsDelta > 0 ? "+" : ""}{rt.pointsDelta}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </button>
+
+      {/* Expanded: affected players */}
+      {expanded && affected.length > 0 && (
+        <div className="px-4 py-2 bg-zinc-900/50 space-y-0.5">
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">
+            Affected Players
+          </p>
+          {affected.map((ev) => {
+            const { icon, label } = getStatLabel(ev.stat);
+            return (
+              <div
+                key={`${ev.playerSlug}-${ev.stat}`}
+                className="flex items-center gap-2 py-0.5"
+              >
+                <span className="text-xs">{icon}</span>
+                <span className={cn(
+                  "text-[11px] font-medium",
+                  ev.isOwned ? "text-primary" : "text-zinc-300",
+                )}>
+                  {ev.playerName.split(" ").pop()}
+                </span>
+                <span className="text-[10px] text-zinc-500">{label}</span>
+                <span className={cn(
+                  "text-[10px] font-bold tabular-nums ml-auto",
+                  ev.pointsDelta > 0 ? "text-green-400" : "text-red-400",
+                )}>
+                  {ev.pointsDelta > 0 ? "+" : ""}{ev.pointsDelta}
+                </span>
+                <span className="text-[9px] text-zinc-600 tabular-nums">
+                  {ev.playerTotalScore} pts
+                </span>
+              </div>
+            );
+          })}
+          {totalDelta !== 0 && (
+            <div className="flex items-center justify-end gap-1 pt-1 border-t border-zinc-800/50 mt-1">
+              <span className="text-[10px] text-zinc-500">Net impact</span>
+              <span className={cn(
+                "text-[11px] font-bold tabular-nums",
+                totalDelta > 0 ? "text-green-400" : "text-red-400",
+              )}>
+                {totalDelta > 0 ? "+" : ""}{Math.round(totalDelta * 10) / 10}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Events Feed with Variant System ───
 
 const REACTION_EMOJIS = ["🔥", "👏", "😤", "💪", "😩", "🫡"];
 
-function EventsFeed({ events, variant = 1, game }: { events: GameEvent[]; variant?: number; game?: GameDetail | null }) {
+function EventsFeed({ events, variant = 1, game }: { events: FeedItem[]; variant?: number; game?: GameDetail | null }) {
   const [reactions, setReactions] = useState<Record<string, Record<string, number>>>({});
   const [openPicker, setOpenPicker] = useState<string | null>(null);
 
@@ -821,7 +993,13 @@ function EventsFeed({ events, variant = 1, game }: { events: GameEvent[]; varian
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {events.map((ev, i) => {
+      {events.map((item, i) => {
+        // ── Batched impact card ──
+        if (isBatchedEvent(item)) {
+          return <BatchedEventCard key={item.id} batch={item} game={game} />;
+        }
+
+        const ev = item;
         const { label, icon } = getStatLabel(ev.stat);
         const isPositive = ev.pointsDelta > 0;
         const isNear = ev.stat.startsWith("near_");

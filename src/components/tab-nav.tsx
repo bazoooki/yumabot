@@ -11,6 +11,7 @@ import {
   List,
   Trophy,
   Shield,
+  Medal,
   RefreshCw,
 } from "lucide-react";
 import { useCards } from "@/providers/cards-provider";
@@ -66,6 +67,22 @@ const TABS = [
     icon: Shield,
     borderColor: "border-violet-400",
     mobileAccent: "text-violet-400",
+    badge: "beta",
+  },
+  {
+    href: "/results",
+    label: "Results",
+    icon: Medal,
+    borderColor: "border-emerald-400",
+    mobileAccent: "text-emerald-400",
+    badge: "beta",
+  },
+  {
+    href: "/power-rank",
+    label: "Power Rank",
+    icon: TrendingUp,
+    borderColor: "border-orange-400",
+    mobileAccent: "text-orange-400",
     badge: "beta",
   },
 ] satisfies {

@@ -1,4 +1,4 @@
-import type { GameDetail, GameEvent } from "./types";
+import type { GameDetail, GameEvent, BatchedGameEvent, FeedItem } from "./types";
 
 /** Stat display config — creative icons per action type */
 const STAT_CONFIG: Record<string, { label: string; icon: string }> = {
@@ -229,6 +229,122 @@ export function getStatLabel(stat: string): { label: string; icon: string } {
       icon: "📊",
     }
   );
+}
+
+// ─── Event batching ───────────────────────────────────────────────
+
+/** Stats that can trigger a batch (big impact events) */
+const TRIGGER_STATS = new Set([
+  "goal", "goals", "own_goal", "red_card",
+  "penalty_won", "penalty_conceded", "error_led_to_goal",
+]);
+
+/** Stats that are secondary triggers (shown prominently but grouped with a goal) */
+const RELATED_TRIGGER_STATS = new Set(["assist"]);
+
+/** Stats that are ripple effects of a goal */
+const RIPPLE_STATS = new Set([
+  "goal_conceded", "clean_sheet", "clean_sheet_60",
+]);
+
+/**
+ * Takes a flat array of events from a single diffGameStats cycle and groups
+ * causally-related events into BatchedGameEvents.
+ *
+ * Logic:
+ * - If there's a trigger event (goal, red card, etc.), create a batch
+ * - Assists at the same minute pair with goals
+ * - Ripple events (clean_sheet loss, goal_conceded) fold into the batch
+ * - Everything else stays as individual events
+ */
+export function batchEvents(events: GameEvent[]): FeedItem[] {
+  if (events.length <= 1) return events;
+
+  const triggers: GameEvent[] = [];
+  const relatedTriggers: GameEvent[] = [];
+  const ripples: GameEvent[] = [];
+  const standalone: GameEvent[] = [];
+
+  for (const ev of events) {
+    if (TRIGGER_STATS.has(ev.stat)) {
+      triggers.push(ev);
+    } else if (RELATED_TRIGGER_STATS.has(ev.stat)) {
+      relatedTriggers.push(ev);
+    } else if (RIPPLE_STATS.has(ev.stat)) {
+      ripples.push(ev);
+    } else {
+      standalone.push(ev);
+    }
+  }
+
+  // No trigger → no batching, return all events individually
+  if (triggers.length === 0) return events;
+
+  // Build one batch per trigger event
+  const result: FeedItem[] = [];
+  const usedRelated = new Set<number>();
+  const usedRipples = new Set<number>();
+
+  for (const trigger of triggers) {
+    // Find related triggers (e.g. assist for a goal — different team from trigger isn't an assist for this goal)
+    const related: GameEvent[] = [];
+    for (let i = 0; i < relatedTriggers.length; i++) {
+      if (usedRelated.has(i)) continue;
+      const rt = relatedTriggers[i];
+      // Assists pair with goals (same team or just same batch if only one goal)
+      if (
+        (trigger.stat === "goal" || trigger.stat === "goals") &&
+        rt.stat === "assist"
+      ) {
+        // Same team → definitely paired
+        if (rt.teamCode === trigger.teamCode || triggers.length === 1) {
+          related.push(rt);
+          usedRelated.add(i);
+        }
+      }
+    }
+
+    // Ripple effects: clean sheet / goal conceded from the opposing team
+    const affected: GameEvent[] = [];
+    for (let i = 0; i < ripples.length; i++) {
+      if (usedRipples.has(i)) continue;
+      const rp = ripples[i];
+      // goal_conceded / clean_sheet loss → opposing team
+      if (rp.teamCode !== trigger.teamCode || trigger.stat === "own_goal") {
+        affected.push(rp);
+        usedRipples.add(i);
+      }
+    }
+
+    // Also pull in remaining standalone events that are score-only updates
+    // for players on the opposing team (they're ripple effects too)
+    // Keep it simple: only ripple stats go in, others stay standalone
+
+    const batch: BatchedGameEvent = {
+      type: "batched",
+      id: `batch-${trigger.playerSlug}-${trigger.stat}-${trigger.timestamp}`,
+      trigger,
+      relatedTriggers: related,
+      affected,
+      minute: trigger.minute,
+      timestamp: trigger.timestamp,
+    };
+
+    result.push(batch);
+  }
+
+  // Add unused related triggers as standalone
+  for (let i = 0; i < relatedTriggers.length; i++) {
+    if (!usedRelated.has(i)) result.push(relatedTriggers[i]);
+  }
+  // Add unused ripples as standalone
+  for (let i = 0; i < ripples.length; i++) {
+    if (!usedRipples.has(i)) result.push(ripples[i]);
+  }
+  // Add all standalone events
+  result.push(...standalone);
+
+  return result;
 }
 
 export function extractGoalScorers(

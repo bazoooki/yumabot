@@ -7,9 +7,11 @@ import type {
   PlayerIntel,
   ScoredCardWithStrategy,
   LineupProbability,
+  GWPlan,
 } from "./types";
 import { positionMatchesSlot } from "./normalization";
 import { recommendInSeasonLineup, mapThresholdToLevel } from "./ai-lineup";
+import { planGameweek } from "./gw-optimizer";
 
 const DEFAULT_SLOTS: InSeasonLineupSlot[] = [
   { position: "GK", card: null, isCaptain: false },
@@ -45,6 +47,11 @@ interface InSeasonStore {
   // Cross-team tracking: cards used in other teams of the same competition
   usedCardSlugs: Set<string>;
 
+  // GW Planner
+  plannerMode: boolean;
+  gwPlan: GWPlan | null;
+  isPlanning: boolean;
+
   // Actions
   setCompetitions(comps: InSeasonCompetition[], fixtureSlug: string | null, gameWeek: number | null): void;
   selectCompetition(slug: string): void;
@@ -59,6 +66,9 @@ interface InSeasonStore {
   setAutoFilling(filling: boolean): void;
   setStrategyResults(results: ScoredCardWithStrategy[] | null, probability: LineupProbability | null): void;
   autoFillWithStrategy(cards: SorareCard[]): Promise<void>;
+  setPlannerMode(enabled: boolean): void;
+  planGameweek(cards: SorareCard[]): Promise<void>;
+  applyAllocation(competitionSlug: string): void;
 }
 
 function computeUsedCardSlugs(
@@ -129,6 +139,10 @@ export const useInSeasonStore = create<InSeasonStore>((set, get) => ({
   isAutoFilling: false,
 
   usedCardSlugs: new Set(),
+
+  plannerMode: false,
+  gwPlan: null,
+  isPlanning: false,
 
   setCompetitions: (comps, fixtureSlug, gameWeek) => {
     const state = get();
@@ -307,6 +321,100 @@ export const useInSeasonStore = create<InSeasonStore>((set, get) => ({
       console.error("[in-season] Auto-fill failed:", err);
       set({ isAutoFilling: false });
     }
+  },
+
+  setPlannerMode: (enabled) => {
+    set({ plannerMode: enabled });
+  },
+
+  planGameweek: async (cards) => {
+    const state = get();
+    if (state.competitions.length === 0) return;
+
+    set({ isPlanning: true, gwPlan: null });
+
+    try {
+      const plan = await planGameweek(
+        cards,
+        state.competitions,
+        state.cachedPlayerIntel,
+      );
+      set({ gwPlan: plan, isPlanning: false });
+    } catch (err) {
+      console.error("[gw-planner] Planning failed:", err);
+      set({ isPlanning: false });
+    }
+  },
+
+  applyAllocation: (competitionSlug) => {
+    const state = get();
+    const allocation = state.gwPlan?.allocations.find(
+      (a) => a.competitionSlug === competitionSlug,
+    );
+    if (!allocation) return;
+
+    // Switch to builder mode with the competition selected
+    const comp = state.competitions.find((c) => c.slug === competitionSlug);
+    const threshold = comp?.streak?.thresholds.find((t) => t.isCurrent) ?? null;
+
+    const slots: InSeasonLineupSlot[] = DEFAULT_SLOTS.map((s) => ({ ...s }));
+    const placed = new Set<string>();
+
+    for (const sc of allocation.lineup) {
+      const card = sc.card;
+      const primaryPos = card.anyPlayer?.cardPositions?.[0];
+
+      let bestSlot = -1;
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i].card) continue;
+        if (positionMatchesSlot(primaryPos, slots[i].position)) {
+          bestSlot = i;
+          break;
+        }
+      }
+
+      if (bestSlot === -1) {
+        const exSlotIndex = slots.findIndex((s) => s.position === "EX");
+        if (exSlotIndex !== -1 && !slots[exSlotIndex].card) {
+          bestSlot = exSlotIndex;
+        }
+      }
+
+      const playerSlug = card.anyPlayer?.slug ?? card.slug;
+      if (bestSlot !== -1 && !placed.has(playerSlug)) {
+        slots[bestSlot] = { ...slots[bestSlot], card };
+        placed.add(playerSlug);
+      }
+    }
+
+    // Auto-assign captain to highest expected score
+    let bestCaptainIdx = -1;
+    let bestCaptainScore = -1;
+    for (let i = 0; i < slots.length; i++) {
+      if (!slots[i].card) continue;
+      const sc = allocation.lineup.find(
+        (l) => l.card.slug === slots[i].card?.slug,
+      );
+      if (sc && sc.strategy.expectedScore > bestCaptainScore) {
+        bestCaptainScore = sc.strategy.expectedScore;
+        bestCaptainIdx = i;
+      }
+    }
+    if (bestCaptainIdx >= 0) {
+      slots[bestCaptainIdx] = { ...slots[bestCaptainIdx], isCaptain: true };
+    }
+
+    set({
+      plannerMode: false,
+      selectedCompSlug: competitionSlug,
+      selectedTeamIndex: 0,
+      slots,
+      selectedSlotIndex: null,
+      targetThreshold: threshold,
+      strategyResults: allocation.lineup,
+      lineupProbability: null,
+      usedCardSlugs: computeUsedCardSlugs(state.competitions, competitionSlug, 0),
+    });
   },
 }));
 

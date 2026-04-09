@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { GameDetail, GameEvent } from "@/lib/types";
-import { diffGameStats } from "@/lib/game-events";
+import { toast } from "sonner";
+import type { GameDetail, GameEvent, FeedItem } from "@/lib/types";
+import { isBatchedEvent } from "@/lib/types";
+import { diffGameStats, batchEvents, getStatLabel } from "@/lib/game-events";
 
 const MAX_EVENTS = 50;
 const POLL_INTERVAL = 30_000; // 30s for detailed stats
@@ -18,7 +20,7 @@ export function useGameStream(gameId: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [updateCount, setUpdateCount] = useState(0);
-  const [events, setEvents] = useState<GameEvent[]>([]);
+  const [events, setEvents] = useState<FeedItem[]>([]);
   const esRef = useRef<EventSource | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevStatsRef = useRef<Map<string, Map<string, number>>>(new Map());
@@ -54,8 +56,34 @@ export function useGameStream(gameId: string) {
         prevStatsRef.current = nextState;
 
         if (newEvents.length > 0) {
-          console.log("[Game Events] Detected stat changes:", newEvents);
-          setEvents((prev) => [...newEvents, ...prev].slice(0, MAX_EVENTS));
+          const feedItems = batchEvents(newEvents);
+          console.log(
+            `[Game Events] ${newEvents.length} stat changes → ${feedItems.length} feed items`,
+          );
+          setEvents((prev) => [...feedItems, ...prev].slice(0, MAX_EVENTS));
+
+          // Toast for big events involving owned players
+          for (const item of feedItems) {
+            if (isBatchedEvent(item)) {
+              const ev = item.trigger;
+              const { icon } = getStatLabel(ev.stat);
+              if (ev.isOwned) {
+                toast.info(
+                  `${icon} ${ev.playerName} — ${getStatLabel(ev.stat).label} ${ev.minute}'`,
+                  { duration: 8000 },
+                );
+              }
+            } else if (
+              item.isOwned &&
+              (item.stat === "goal" || item.stat === "goals" || item.stat === "assist")
+            ) {
+              const { icon } = getStatLabel(item.stat);
+              toast.info(
+                `${icon} ${item.playerName} — ${getStatLabel(item.stat).label} ${item.minute}'`,
+                { duration: 8000 },
+              );
+            }
+          }
         }
       }
 

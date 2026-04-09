@@ -157,6 +157,26 @@ export interface GameEvent {
   timestamp: number;
 }
 
+/** A group of causally-related events (e.g. a goal + all affected players) */
+export interface BatchedGameEvent {
+  type: "batched";
+  id: string;
+  /** The headline event — goal, own_goal, red_card, penalty */
+  trigger: GameEvent;
+  /** Other trigger-level events in the same batch (e.g. assist paired with a goal) */
+  relatedTriggers: GameEvent[];
+  /** Ripple effects — clean sheet loss, goal_conceded, score changes */
+  affected: GameEvent[];
+  minute: number;
+  timestamp: number;
+}
+
+export type FeedItem = GameEvent | BatchedGameEvent;
+
+export function isBatchedEvent(item: FeedItem): item is BatchedGameEvent {
+  return "type" in item && item.type === "batched";
+}
+
 export interface GameDetail {
   id: string;
   date: string;
@@ -329,4 +349,80 @@ export interface InSeasonLineupSlot {
   position: LineupPosition;
   card: SorareCard | null;
   isCaptain: boolean;
+}
+
+// --- GW Planner types ---
+
+export interface GWPlan {
+  allocations: CompetitionAllocation[];
+  contestedCards: ContestedCard[];
+  gaps: GapWarning[];
+  totalExpectedScore: number;
+}
+
+export interface CompetitionAllocation {
+  competitionSlug: string;
+  lineup: ScoredCardWithStrategy[];
+  expectedScore: number;
+  filledSlots: number;
+  totalSlots: number;
+}
+
+export interface ContestedCard {
+  card: SorareCard;
+  eligibleCompetitions: string[];
+  assignedTo: string | null;
+  valueByCompetition: Record<string, number>;
+}
+
+export interface GapWarning {
+  competitionSlug: string;
+  position: string;
+  message: string;
+}
+
+// --- Results types ---
+
+export interface ResultsRanking {
+  ranking: number;
+  score: number;
+  user: {
+    slug: string;
+    nickname: string;
+    pictureUrl: string | null;
+  };
+  lineup: ResultsAppearance[];
+}
+
+export interface ResultsAppearance {
+  index: number;
+  captain: boolean;
+  score: number;
+  position: string;
+  grade: number;
+  bonus: number;
+  playerSlug: string;
+  playerName: string;
+  cardSlug: string | null;
+}
+
+export interface LeaderboardSummary {
+  slug: string;
+  displayName: string;
+  leagueName: string;
+  division: number;
+  mainRarityType: string;
+  totalEntries: number;
+  podium: ResultsRanking[];
+  clanEntries: ResultsRanking[];
+}
+
+export interface Achievement {
+  type: string;
+  title: string;
+  description: string;
+  userSlug: string;
+  userName: string;
+  value: number;
+  meta: Record<string, unknown>;
 }

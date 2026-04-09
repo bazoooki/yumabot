@@ -459,3 +459,121 @@ export const GAME_DETAIL_QUERY = gql`
     }
   }
 `;
+
+// --- Results / Leaderboard queries ---
+
+export const FIXTURE_LEADERBOARDS_QUERY = gql`
+  query FixtureLeaderboards($type: So5State!) {
+    so5 {
+      so5Fixture(type: $type) {
+        slug
+        gameWeek
+        aasmState
+        endDate
+        so5Leagues {
+          slug
+          displayName
+          so5Leaderboards(notRooms: true) {
+            slug
+            displayName
+            division
+            mainRarityType
+            so5LineupsCount
+            so5League {
+              slug
+              displayName
+            }
+            so5LeaderboardGroup {
+              displayName
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const PAST_FIXTURES_LIST_QUERY = gql`
+  query PastFixtures($first: Int!) {
+    so5 {
+      so5Fixtures(first: $first, sport: FOOTBALL, aasmStates: ["closed", "started", "playing"]) {
+        nodes {
+          slug
+          gameWeek
+          aasmState
+          endDate
+        }
+      }
+    }
+  }
+`;
+
+export const FIXTURE_LEADERBOARDS_BY_SLUG_QUERY = gql`
+  query FixtureLeaderboardsBySlug($slug: String!) {
+    so5 {
+      so5Fixture(slug: $slug) {
+        slug
+        gameWeek
+        aasmState
+        endDate
+        so5Leagues {
+          slug
+          displayName
+          so5Leaderboards(notRooms: true) {
+            slug
+            displayName
+            division
+            mainRarityType
+            so5LineupsCount
+            so5League {
+              slug
+              displayName
+            }
+            so5LeaderboardGroup {
+              displayName
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const LEADERBOARD_RANKINGS_QUERY = gql`
+  query LeaderboardRankings($slug: String!, $page: Int!, $pageSize: Int!) {
+    so5 {
+      so5Leaderboard(slug: $slug) {
+        slug
+        so5RankingsPaginated(page: $page, pageSize: $pageSize) {
+          currentPage
+          pages
+          totalCount
+          nodes {
+            ranking
+            score
+            user {
+              slug
+              nickname
+              pictureUrl
+            }
+            so5Lineup {
+              so5Appearances {
+                index
+                captain
+                score
+                position
+                anyPlayer {
+                  slug
+                  displayName
+                }
+                anyCard {
+                  slug
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
