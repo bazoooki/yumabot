@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Shield } from "lucide-react";
+import { ChevronDown, ChevronRight, Shield, Info, X } from "lucide-react";
 import { CLAN_MEMBERS } from "@/lib/clan/members";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -130,6 +130,63 @@ function RankRow({ entry, compact }: { entry: RankedEntry; compact?: boolean }) 
   );
 }
 
+function FormulaModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 max-w-md w-full mx-4 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-200">Power Ranking Formula</h2>
+          <button onClick={onClose} className="p-1 hover:bg-zinc-800 rounded">
+            <X className="w-4 h-4 text-zinc-500" />
+          </button>
+        </div>
+
+        <div className="space-y-3 text-xs text-zinc-400">
+          <div>
+            <h3 className="text-zinc-300 font-medium mb-1">Placement Points</h3>
+            <p className="mb-1.5">Based on your percentile finish in each competition:</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 bg-zinc-800/50 rounded-lg p-2 font-mono text-[11px]">
+              <span className="text-emerald-400">Top 1%</span><span className="text-right">100 pts</span>
+              <span className="text-emerald-400">Top 5%</span><span className="text-right">80 pts</span>
+              <span className="text-zinc-300">Top 10%</span><span className="text-right">60 pts</span>
+              <span className="text-zinc-300">Top 25%</span><span className="text-right">40 pts</span>
+              <span className="text-zinc-500">Top 50%</span><span className="text-right">20 pts</span>
+              <span className="text-zinc-500">Top 100%</span><span className="text-right">5 pts</span>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-zinc-300 font-medium mb-1">Division Multiplier</h3>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 bg-zinc-800/50 rounded-lg p-2 font-mono text-[11px]">
+              <span className="text-amber-400">Division 1</span><span className="text-right">&times;2.0</span>
+              <span className="text-zinc-300">Division 2</span><span className="text-right">&times;1.5</span>
+              <span className="text-zinc-500">Division 3+</span><span className="text-right">&times;1.0</span>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-zinc-300 font-medium mb-1">Rules</h3>
+            <ul className="space-y-1 list-disc list-inside text-zinc-500">
+              <li>Only your <span className="text-zinc-300">best entry per competition</span> counts (best across all divisions)</li>
+              <li>Only your <span className="text-zinc-300">best team</span> if you have multiple in one leaderboard</li>
+              <li>Points are <span className="text-zinc-300">summed across all competitions</span> you enter</li>
+              <li>All Time = cumulative across all scraped gameweeks</li>
+              <li>GWs with fewer than 3 competitions with data are excluded</li>
+            </ul>
+          </div>
+
+          <div className="text-[10px] text-zinc-600 pt-1 border-t border-zinc-800">
+            Example: Rank #50 out of 10,000 in All Star Div 1 = top 0.5% = 100 pts &times; 2.0 = 200 pts
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClanSidebar({ clanRankings, totalManagers }: { clanRankings: RankedEntry[]; totalManagers: number }) {
   if (clanRankings.length === 0) {
     return (
@@ -148,27 +205,38 @@ function ClanSidebar({ clanRankings, totalManagers }: { clanRankings: RankedEntr
             key={entry.userSlug}
             className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-2.5 space-y-1.5"
           >
-            <div className="flex items-center gap-2">
-              {entry.pictureUrl ? (
-                <img
-                  src={entry.pictureUrl}
-                  alt=""
-                  className="w-6 h-6 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-6 h-6 rounded-full bg-zinc-700" />
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-violet-300 truncate">
+            {/* Rank badge */}
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                {entry.pictureUrl ? (
+                  <img
+                    src={entry.pictureUrl}
+                    alt=""
+                    className="w-7 h-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-zinc-700" />
+                )}
+                <div className="text-sm font-semibold text-violet-300">
                   {clanMember?.name ?? entry.nickname}
                 </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-2.5 py-1.5">
+              <div>
+                <div className="text-lg font-bold text-zinc-100 tabular-nums">
+                  #{entry.rank.toLocaleString()}
+                </div>
                 <div className="text-[10px] text-zinc-500">
-                  #{entry.rank} of {totalManagers.toLocaleString()}
+                  of {totalManagers.toLocaleString()} managers
                 </div>
               </div>
-              <span className="text-sm font-bold text-emerald-400 tabular-nums">
-                {entry.totalPoints}
-              </span>
+              <div className="text-right">
+                <div className="text-lg font-bold text-emerald-400 tabular-nums">
+                  {entry.totalPoints.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-zinc-500">points</div>
+              </div>
             </div>
 
             <div className="space-y-0.5">
@@ -208,6 +276,7 @@ export function PowerRankingsSection({
 }) {
   const [cumulative, setCumulative] = useState(true);
   const [page, setPage] = useState(0);
+  const [showFormula, setShowFormula] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["power-rankings", cumulative ? "all" : gameWeek, cumulative],
@@ -253,12 +322,21 @@ export function PowerRankingsSection({
             </button>
           </div>
 
-          {data && (
-            <span className="text-[10px] text-zinc-600">
-              {data.totalManagers.toLocaleString()} managers
-              {data.cumulative && ` · ${data.gameWeeks.length} GWs`}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFormula(true)}
+              className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-300 bg-zinc-800/50 rounded-md border border-zinc-800 hover:border-zinc-700 transition-colors"
+            >
+              <Info className="w-3 h-3" />
+              Formula
+            </button>
+            {data && (
+              <span className="text-[10px] text-zinc-600">
+                {data.totalManagers.toLocaleString()} managers
+                {data.cumulative && ` · ${data.gameWeeks.length} GWs`}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Table header */}
@@ -374,6 +452,8 @@ export function PowerRankingsSection({
           />
         ) : null}
       </div>
+
+      {showFormula && <FormulaModal onClose={() => setShowFormula(false)} />}
     </div>
   );
 }
