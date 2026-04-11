@@ -44,9 +44,29 @@ function BatchedEventCard({
   if (isGoal || isOwnGoal) {
     return (
       <div className={cn(
-        "border-b-2 overflow-hidden",
+        "border-b-2 overflow-hidden animate-[goal-flash_0.6s_ease-out]",
         isGoal ? "border-green-500/40" : "border-red-500/40",
       )}>
+        <style>{`
+          @keyframes goal-flash {
+            0% { background-color: rgba(${isGoal ? "34,197,94" : "239,68,68"}, 0.3); }
+            100% { background-color: transparent; }
+          }
+          @keyframes goal-text {
+            0%, 20% { transform: scale(1.15); }
+            40% { transform: scale(0.95); }
+            60% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+          }
+          @keyframes goal-points {
+            0% { opacity: 0; transform: translateY(8px); }
+            100% { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes goal-shine {
+            0% { left: -100%; }
+            100% { left: 200%; }
+          }
+        `}</style>
         <button
           onClick={() => setExpanded(!expanded)}
           className={cn(
@@ -56,53 +76,72 @@ function BatchedEventCard({
               : "bg-gradient-to-r from-red-500/15 via-red-500/5 to-transparent",
           )}
         >
-          {/* Glow effect */}
+          {/* Animated shine streak */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div
+              className={cn(
+                "absolute top-0 bottom-0 w-1/3 opacity-10",
+                isGoal
+                  ? "bg-gradient-to-r from-transparent via-green-400 to-transparent"
+                  : "bg-gradient-to-r from-transparent via-red-400 to-transparent",
+              )}
+              style={{ animation: "goal-shine 1.2s ease-out forwards" }}
+            />
+          </div>
+
+          {/* Glow */}
           <div className={cn(
-            "absolute inset-0 opacity-20",
+            "absolute inset-0 opacity-15",
             isGoal
-              ? "bg-gradient-to-b from-green-500/30 to-transparent"
-              : "bg-gradient-to-b from-red-500/30 to-transparent",
+              ? "bg-gradient-to-b from-green-500/40 to-transparent"
+              : "bg-gradient-to-b from-red-500/40 to-transparent",
           )} />
 
           <div className="relative px-4 py-4">
-            {/* Top row: GOAL label + minute + time */}
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-3xl">⚽</span>
-                <span className={cn(
-                  "text-lg font-black tracking-wide",
-                  isGoal ? "text-green-400" : "text-red-400",
-                )}>
-                  {isGoal ? "GOAL" : "OWN GOAL"}
-                </span>
+            {/* GOAL header */}
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-3" style={{ animation: "goal-text 0.5s ease-out" }}>
+                <span className="text-4xl drop-shadow-lg">⚽</span>
+                <div>
+                  <span className={cn(
+                    "text-xl font-black tracking-widest block",
+                    isGoal ? "text-green-400" : "text-red-400",
+                  )}>
+                    {isGoal ? "GOAL!" : "OWN GOAL"}
+                  </span>
+                  {multiGame && trigger.gameLabel && (
+                    <span className="text-[10px] text-zinc-500">{trigger.gameLabel}</span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400 font-semibold">{trigger.minute}&apos;</span>
+              <div className="flex flex-col items-end gap-0.5">
+                <span
+                  className={cn("text-xl font-black tabular-nums", isGoal ? "text-green-400" : "text-red-400")}
+                  style={{ animation: "goal-points 0.4s ease-out 0.2s both" }}
+                >
+                  {trigger.pointsDelta > 0 ? "+" : ""}{trigger.pointsDelta}
+                </span>
+                <span className="text-[10px] text-zinc-500 font-semibold">{trigger.minute}&apos;</span>
                 <span className="text-[9px] text-zinc-600 tabular-nums">{formatTime(batch.timestamp)}</span>
               </div>
             </div>
 
             {/* Scorer */}
             <div className="flex items-center gap-2">
-              <span className={cn("text-base font-bold", isGoal ? "text-green-300" : "text-red-300")}>
+              <span className={cn("text-sm font-bold", isGoal ? "text-green-300" : "text-red-300")}>
                 {trigger.playerName}
               </span>
               <span className="text-[10px] text-zinc-500">{trigger.teamCode}</span>
               {trigger.isOwned && <span className="w-2 h-2 rounded-full bg-primary" />}
-              <span className={cn(
-                "text-base font-black tabular-nums ml-auto",
-                trigger.pointsDelta > 0 ? "text-green-400" : "text-red-400",
-              )}>
-                {trigger.pointsDelta > 0 ? "+" : ""}{trigger.pointsDelta}
-              </span>
+              <span className="text-[10px] text-primary font-semibold tabular-nums ml-auto">{trigger.playerTotalScore} pts</span>
             </div>
 
             {/* Assist */}
             {assistEvent && (
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1.5 pl-0.5">
                 <span className="text-sm">👟</span>
                 <span className="text-[11px] text-zinc-300">
-                  Assist: <span className="font-semibold text-zinc-200">{assistEvent.playerName.split(" ").pop()}</span>
+                  <span className="font-semibold text-zinc-200">{assistEvent.playerName.split(" ").pop()}</span>
                 </span>
                 {assistEvent.isOwned && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
                 <span className={cn(
@@ -112,13 +151,6 @@ function BatchedEventCard({
                   {assistEvent.pointsDelta > 0 ? "+" : ""}{assistEvent.pointsDelta}
                 </span>
               </div>
-            )}
-
-            {/* Game label */}
-            {multiGame && trigger.gameLabel && (
-              <span className="text-[9px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.5 rounded inline-block mt-1.5">
-                {trigger.gameLabel}
-              </span>
             )}
 
             {/* Expand hint */}

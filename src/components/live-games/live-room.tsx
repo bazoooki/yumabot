@@ -13,8 +13,6 @@ import { fetchFixture } from "@/lib/fixtures";
 import { cn } from "@/lib/utils";
 import type { SorareCard, InSeasonCompetition, FixtureGame, GameDetail } from "@/lib/types";
 
-/** A game that ended more than 15 min ago is no longer "recent" */
-const RECENT_CUTOFF_MS = 15 * 60 * 1000;
 /** Typical max game duration (100 min + extra time) */
 const MAX_GAME_DURATION_MS = 130 * 60 * 1000;
 
@@ -37,10 +35,7 @@ async function fetchLiveLineups(userSlug: string) {
 
 /** Is a "played" game recent enough to still show? */
 function isRecentlyFinished(game: FixtureGame): boolean {
-  const startMs = new Date(game.date).getTime();
-  const now = Date.now();
-  // Game started less than (max duration + 15 min) ago
-  return now - startMs < MAX_GAME_DURATION_MS + RECENT_CUTOFF_MS;
+  return false; // Remove finished games immediately
 }
 
 export function LiveRoom({ cards, userSlug }: Props) {
@@ -338,8 +333,8 @@ export function LiveRoom({ cards, userSlug }: Props) {
 
           {/* Tracked Players — compact chips */}
           {monitoredPlayers.length > 0 && (
-            <div className="border-t border-zinc-800 shrink-0 px-3 py-2">
-              <div className="flex items-center gap-2 mb-1.5">
+            <div className="border-t border-zinc-800 shrink-0 md:shrink-0 px-3 py-2 max-h-[30vh] md:max-h-none overflow-y-auto">
+              <div className="flex items-center gap-2 mb-1.5 sticky top-0 bg-zinc-950/90 backdrop-blur-sm z-10 -mx-3 px-3 -mt-2 pt-2 pb-1">
                 <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
                   Tracking
                 </span>

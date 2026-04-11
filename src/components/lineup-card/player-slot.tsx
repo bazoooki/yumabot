@@ -6,13 +6,14 @@ import { cn } from "@/lib/utils";
 
 export type LineupCardVariant = "default" | "compact";
 
-/** Format game date as short label: "12 SUN" */
+/** Format game date: today → "7:30 PM", other days → "12 SUN" */
 function formatGameTime(dateStr: string | null): string | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
-  const day = d.getDate();
-  const weekday = d.toLocaleDateString([], { weekday: "short" }).toUpperCase();
-  return `${day} ${weekday}`;
+  if (d.toDateString() === new Date().toDateString()) {
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  return `${d.getDate()} ${d.toLocaleDateString([], { weekday: "short" }).toUpperCase()}`;
 }
 
 export function PlayerSlot({

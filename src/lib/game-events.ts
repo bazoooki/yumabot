@@ -146,6 +146,45 @@ export function diffGameStats(
       });
     }
 
+    // ── Detect decisive stats (goals, assists) from positiveDecisiveStats ──
+    // These may not appear as separate entries in detailedScore
+    const DECISIVE_STATS_TO_TRACK = new Set(["goals", "goal", "assist", "clean_sheet", "clean_sheet_60"]);
+    for (const ds of ps.positiveDecisiveStats ?? []) {
+      if (!DECISIVE_STATS_TO_TRACK.has(ds.stat)) continue;
+      const prevVal = prevStats.get(`_decisive_${ds.stat}`) ?? 0;
+      newStats.set(`_decisive_${ds.stat}`, ds.statValue);
+      if (prevVal === 0 && prevStats.size === 0) continue; // first fetch
+      if (ds.statValue <= prevVal) continue; // no change
+      // Only add if we didn't already emit this stat from detailedScore
+      const alreadyEmitted = events.some(
+        (e) => e.playerSlug === slug && (e.stat === ds.stat || (ds.stat === "goals" && e.stat === "goal")),
+      );
+      if (!alreadyEmitted) {
+        // Use level_score delta as the points impact (captures the full score jump: +25 first goal, +10 second)
+        const levelScoreEvent = events.find((e) => e.playerSlug === slug && e.stat === "level_score");
+        const pointsDelta = levelScoreEvent?.pointsDelta ?? Math.round(ds.totalScore * 10) / 10;
+
+        // Remove the level_score event since the goal card will show the points
+        if (levelScoreEvent) {
+          const idx = events.indexOf(levelScoreEvent);
+          if (idx >= 0) events.splice(idx, 1);
+        }
+
+        events.push({
+          playerSlug: slug,
+          playerName: ps.anyPlayer.displayName,
+          teamCode: ps.anyPlayer.activeClub?.code ?? "",
+          minute: matchMinute,
+          stat: ds.stat,
+          category: "decisive",
+          pointsDelta,
+          newValue: ds.statValue,
+          playerTotalScore: Math.round(ps.score),
+          timestamp: Date.now(),
+        });
+      }
+    }
+
     // ── Consolidate same-player events ──
 
     // 1) Combo upgrades: DD→TD or TD→TT — merge into one event showing the upgrade
