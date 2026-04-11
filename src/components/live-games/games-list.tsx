@@ -179,6 +179,8 @@ function GameCard({
   const isLive = game.statusTyped === "playing";
   const isPlayed = game.statusTyped === "played";
 
+  if (!game.homeTeam || !game.awayTeam) return null;
+
   return (
     <button
       onClick={onClick}

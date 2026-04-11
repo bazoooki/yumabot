@@ -12,7 +12,7 @@ export function countMyPlayers(game: FixtureGame, cards: SorareCard[]): number {
   for (const card of cards) {
     const club = card.anyPlayer?.activeClub;
     if (!club?.code) continue;
-    if (club.code === game.homeTeam.code || club.code === game.awayTeam.code) {
+    if (club.code === game.homeTeam?.code || club.code === game.awayTeam?.code) {
       count++;
     }
   }
