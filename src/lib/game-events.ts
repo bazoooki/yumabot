@@ -108,11 +108,6 @@ export function diffGameStats(
     const prevStats = prev.get(slug) ?? new Map<string, number>();
     const newStats = new Map<string, number>();
 
-    // Compute prev total so we can build a running score per event
-    let prevTotal = 0;
-    for (const v of prevStats.values()) prevTotal += v;
-    let runningTotal = prevTotal;
-
     for (const stat of ps.detailedScore ?? []) {
       newStats.set(stat.stat, stat.totalScore);
 
@@ -120,8 +115,6 @@ export function diffGameStats(
       const delta = stat.totalScore - prevScore;
 
       if (Math.abs(delta) < 0.01) continue;
-
-      runningTotal += delta;
 
       const isImportant =
         ALWAYS_SHOW.has(stat.stat) || Math.abs(delta) >= MIN_POINTS_THRESHOLD;
@@ -148,9 +141,52 @@ export function diffGameStats(
         category,
         pointsDelta: Math.round(delta * 10) / 10,
         newValue: stat.statValue,
-        playerTotalScore: Math.round(runningTotal),
+        playerTotalScore: Math.round(ps.score),
         timestamp: Date.now(),
       });
+    }
+
+    // ── Consolidate same-player events ──
+
+    // 1) Combo upgrades: DD→TD or TD→TT — merge into one event showing the upgrade
+    const COMBO_RANK = ["double_double", "triple_double", "triple_triple"];
+    const playerEvents = events.filter((e) => e.playerSlug === slug);
+    const comboEvents = playerEvents.filter((e) => COMBO_RANK.includes(e.stat));
+    if (comboEvents.length > 1) {
+      // Find highest combo gained and lowest combo lost
+      const gained = comboEvents.filter((e) => e.pointsDelta > 0)
+        .sort((a, b) => COMBO_RANK.indexOf(b.stat) - COMBO_RANK.indexOf(a.stat))[0];
+      const lost = comboEvents.filter((e) => e.pointsDelta < 0);
+      if (gained && lost.length > 0) {
+        const netDelta = comboEvents.reduce((sum, e) => sum + e.pointsDelta, 0);
+        // Remove all combo events, replace with the upgrade
+        for (const e of comboEvents) {
+          const idx = events.indexOf(e);
+          if (idx >= 0) events.splice(idx, 1);
+        }
+        events.push({
+          ...gained,
+          pointsDelta: Math.round(netDelta * 10) / 10,
+        });
+      }
+    }
+
+    // 2) Adjusted stats pair with their source: merge if same player, same poll
+    const ADJUSTED_PAIRS: Record<string, string> = {
+      adjusted_total_att_assist: "big_chance_created",
+      adjusted_total_scoring_att: "shot_on_target",
+    };
+    for (const [adjStat, sourceStat] of Object.entries(ADJUSTED_PAIRS)) {
+      const adjIdx = events.findIndex((e) => e.playerSlug === slug && e.stat === adjStat);
+      const srcIdx = events.findIndex((e) => e.playerSlug === slug && e.stat === sourceStat);
+      if (adjIdx >= 0 && srcIdx >= 0) {
+        // Merge into the source event with combined delta
+        events[srcIdx] = {
+          ...events[srcIdx],
+          pointsDelta: Math.round((events[srcIdx].pointsDelta + events[adjIdx].pointsDelta) * 10) / 10,
+        };
+        events.splice(adjIdx, 1);
+      }
     }
 
     // Check near-achievement for defending combos

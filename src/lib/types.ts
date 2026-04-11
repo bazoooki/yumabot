@@ -333,6 +333,14 @@ export interface InSeasonSlot {
   isCaptain: boolean;
   score: number | null;
   scoreStatus: string | null;
+  /** Game date (ISO string) — for showing kickoff time on scheduled players */
+  gameDate: string | null;
+  /** Game status */
+  gameStatus: string | null;
+  /** Home team code */
+  gameHomeCode: string | null;
+  /** Away team code */
+  gameAwayCode: string | null;
 }
 
 export interface InSeasonStreak {

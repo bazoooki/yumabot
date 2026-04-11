@@ -149,8 +149,8 @@ export function useMultiGameStream({
         // Detect subs
         const subEvents = detectSubs(gameId, gameData, gameLabel);
 
-        // Combine stat events + sub events, filter to owned
-        const allNewEvents = [
+        // Tag ALL events with game context + ownership BEFORE batching
+        const taggedEvents = [
           ...statEvents.map((ev) => ({
             ...ev,
             gameId,
@@ -158,24 +158,40 @@ export function useMultiGameStream({
             isOwned: ownedRef.current.has(ev.playerSlug),
           })),
           ...subEvents,
-        ].filter((ev) => ev.isOwned);
+        ];
 
-        if (allNewEvents.length > 0) {
-          const feedItems = batchEvents(allNewEvents);
+        if (taggedEvents.length > 0) {
+          // Batch ALL events first (so goal+assist stay grouped)
+          const feedItems = batchEvents(taggedEvents);
 
-          const taggedFeed = feedItems.map((item) => {
+          // Then filter: keep items that involve at least one owned player
+          const ownedFeed = feedItems.filter((item) => {
             if (isBatchedEvent(item)) {
-              return {
-                ...item,
-                trigger: { ...item.trigger, gameId, gameLabel },
-                relatedTriggers: item.relatedTriggers.map((rt) => ({ ...rt, gameId, gameLabel })),
-                affected: item.affected.map((a) => ({ ...a, gameId, gameLabel })),
-              };
+              return (
+                item.trigger.isOwned ||
+                item.relatedTriggers.some((rt) => rt.isOwned) ||
+                item.affected.some((a) => a.isOwned)
+              );
             }
-            return item;
+            return item.isOwned;
           });
 
-          setAllEvents((prev) => [...taggedFeed, ...prev].slice(0, MAX_EVENTS));
+          if (ownedFeed.length > 0) {
+            // Propagate gameId/gameLabel into batched sub-events
+            const finalFeed = ownedFeed.map((item) => {
+              if (isBatchedEvent(item)) {
+                return {
+                  ...item,
+                  trigger: { ...item.trigger, gameId, gameLabel },
+                  relatedTriggers: item.relatedTriggers.map((rt) => ({ ...rt, gameId, gameLabel })),
+                  affected: item.affected.map((a) => ({ ...a, gameId, gameLabel })),
+                };
+              }
+              return item;
+            });
+
+            setAllEvents((prev) => [...finalFeed, ...prev].slice(0, MAX_EVENTS));
+          }
         }
       }
     } catch {

@@ -147,14 +147,15 @@ export function LiveRoom({ cards, userSlug }: Props) {
 
   // Monitored players: owned players found in live game rosters
   const monitoredPlayers = useMemo(() => {
-    const players: {
+    type MonitoredPlayer = {
       slug: string; name: string; clubCode: string; pictureUrl: string;
-      gameLabel: string; score: number; fieldStatus: string;
-      minsPlayed: number; gameStatus: string;
-    }[] = [];
+      score: number; fieldStatus: string; minsPlayed: number; gameStatus: string;
+      homeTeam: { code: string; pictureUrl: string }; awayTeam: { code: string; pictureUrl: string };
+      homeScore: number; awayScore: number;
+    };
+    const players: MonitoredPlayer[] = [];
     const seen = new Set<string>();
     for (const [, game] of games) {
-      const gameLabel = `${game.homeTeam.code} vs ${game.awayTeam.code}`;
       for (const ps of game.playerGameScores) {
         const slug = ps.anyPlayer.slug;
         if (!ownedPlayerSlugs.has(slug) || seen.has(slug)) continue;
@@ -165,17 +166,19 @@ export function LiveRoom({ cards, userSlug }: Props) {
           name: ps.anyPlayer.displayName,
           clubCode: ps.anyPlayer.activeClub?.code ?? "",
           pictureUrl: card?.pictureUrl ?? ps.anyPlayer.squaredPictureUrl ?? "",
-          gameLabel,
           score: Math.round(ps.score),
           fieldStatus: ps.anyPlayerGameStats?.fieldStatus ?? "",
           minsPlayed: ps.anyPlayerGameStats?.minsPlayed ?? 0,
           gameStatus: game.statusTyped,
+          homeTeam: { code: game.homeTeam.code, pictureUrl: game.homeTeam.pictureUrl },
+          awayTeam: { code: game.awayTeam.code, pictureUrl: game.awayTeam.pictureUrl },
+          homeScore: game.homeScore,
+          awayScore: game.awayScore,
         });
       }
     }
-    // Sort: ON_FIELD first, then ON_BENCH with mins (subbed off), then ON_BENCH (not yet on), then rest
     players.sort((a, b) => {
-      const order = (p: typeof a) =>
+      const order = (p: MonitoredPlayer) =>
         p.fieldStatus === "ON_FIELD" ? 0 :
         p.fieldStatus === "ON_BENCH" && p.minsPlayed > 0 ? 1 :
         p.fieldStatus === "ON_BENCH" ? 2 : 3;
@@ -333,7 +336,7 @@ export function LiveRoom({ cards, userSlug }: Props) {
             <EventsFeed events={events} variant={8} games={games} multiGame />
           </div>
 
-          {/* Monitored Players */}
+          {/* Tracked Players — compact chips */}
           {monitoredPlayers.length > 0 && (
             <div className="border-t border-zinc-800 shrink-0 px-3 py-2">
               <div className="flex items-center gap-2 mb-1.5">
@@ -347,12 +350,11 @@ export function LiveRoom({ cards, userSlug }: Props) {
                   const isOnField = p.fieldStatus === "ON_FIELD";
                   const isSubbedOff = p.fieldStatus === "ON_BENCH" && p.minsPlayed > 0;
                   const isOnBench = p.fieldStatus === "ON_BENCH" && p.minsPlayed === 0;
-                  const isFinished = p.gameStatus === "played";
 
                   return (
                     <div
                       key={p.slug}
-                      title={`${p.name} — ${p.gameLabel}${isSubbedOff ? ` (off ${p.minsPlayed}')` : ""}`}
+                      title={`${p.name} — ${p.homeTeam.code} ${p.homeScore}-${p.awayScore} ${p.awayTeam.code}${isSubbedOff ? ` (off ${p.minsPlayed}')` : ""}`}
                       className={cn(
                         "flex items-center gap-1.5 px-1.5 py-1 rounded-md border",
                         isOnField ? "bg-green-500/5 border-green-500/20" :
@@ -367,29 +369,20 @@ export function LiveRoom({ cards, userSlug }: Props) {
                           alt={p.name}
                           className="w-5 h-5 rounded-full object-cover object-[center_18%] bg-zinc-700"
                         />
-                        {/* Status badge */}
                         <div className={cn(
                           "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-zinc-900 flex items-center justify-center",
                           isOnField ? "bg-green-500" :
                           isSubbedOff ? "bg-amber-500" :
-                          isOnBench ? "bg-zinc-600" :
-                          isFinished ? "bg-zinc-500" : "bg-zinc-700",
+                          "bg-zinc-600",
                         )}>
                           {isOnField && <span className="w-1 h-1 rounded-full bg-white animate-pulse" />}
                           {isSubbedOff && <span className="text-[5px] text-white font-bold">↓</span>}
                         </div>
                       </div>
-                      <span className={cn(
-                        "text-[10px] font-medium",
-                        isOnField ? "text-zinc-200" : "text-zinc-400",
-                      )}>
+                      <span className={cn("text-[10px] font-medium", isOnField ? "text-zinc-200" : "text-zinc-400")}>
                         {p.name.split(" ").pop()}
                       </span>
-                      <span className={cn(
-                        "text-[9px] font-bold tabular-nums",
-                        isOnField ? "text-primary" :
-                        p.score > 0 ? "text-zinc-400" : "text-zinc-600",
-                      )}>
+                      <span className={cn("text-[9px] font-bold tabular-nums", isOnField ? "text-primary" : p.score > 0 ? "text-zinc-400" : "text-zinc-600")}>
                         {p.score}
                       </span>
                     </div>

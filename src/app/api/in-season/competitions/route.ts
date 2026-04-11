@@ -15,6 +15,8 @@ import type {
 // --- Shared helpers ---
 
 function parseSlot(appearance: any): InSeasonSlot {
+  const pgs = appearance.playerGameScore;
+  const game = pgs?.anyGame;
   return {
     index: appearance.index,
     position: appearance.anyPlayer?.cardPositions?.[0] ?? "",
@@ -27,6 +29,10 @@ function parseSlot(appearance: any): InSeasonSlot {
     isCaptain: appearance.captain ?? false,
     score: appearance.score ?? null,
     scoreStatus: appearance.status ?? null,
+    gameDate: game?.date ?? null,
+    gameStatus: game?.statusTyped ?? null,
+    gameHomeCode: game?.homeTeam?.code ?? null,
+    gameAwayCode: game?.awayTeam?.code ?? null,
   };
 }
 
