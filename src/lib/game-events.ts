@@ -108,6 +108,11 @@ export function diffGameStats(
     const prevStats = prev.get(slug) ?? new Map<string, number>();
     const newStats = new Map<string, number>();
 
+    // Compute prev total so we can build a running score per event
+    let prevTotal = 0;
+    for (const v of prevStats.values()) prevTotal += v;
+    let runningTotal = prevTotal;
+
     for (const stat of ps.detailedScore ?? []) {
       newStats.set(stat.stat, stat.totalScore);
 
@@ -115,6 +120,8 @@ export function diffGameStats(
       const delta = stat.totalScore - prevScore;
 
       if (Math.abs(delta) < 0.01) continue;
+
+      runningTotal += delta;
 
       const isImportant =
         ALWAYS_SHOW.has(stat.stat) || Math.abs(delta) >= MIN_POINTS_THRESHOLD;
@@ -141,7 +148,7 @@ export function diffGameStats(
         category,
         pointsDelta: Math.round(delta * 10) / 10,
         newValue: stat.statValue,
-        playerTotalScore: Math.round(ps.score),
+        playerTotalScore: Math.round(runningTotal),
         timestamp: Date.now(),
       });
     }

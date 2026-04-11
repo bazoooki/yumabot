@@ -150,6 +150,10 @@ export interface GameEvent {
   newValue: number;
   playerTotalScore: number;
   isOwned?: boolean;
+  /** Source game ID (for multi-game rooms) */
+  gameId?: string;
+  /** Display label e.g. "Porto vs Forest" (for multi-game rooms) */
+  gameLabel?: string;
   /** For substitution events */
   subPlayerIn?: string;
   subPlayerOut?: string;

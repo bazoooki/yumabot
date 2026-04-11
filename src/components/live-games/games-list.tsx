@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, Radio } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { fetchFixture, countMyPlayers, formatGameTime } from "@/lib/fixtures";
 import { GameCardSkeleton } from "@/components/ui/skeleton";
@@ -76,6 +77,37 @@ export function GamesList({ cards, onSelectGame }: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4">
+      {/* Live Room banner */}
+      {liveGames.length > 0 && (
+        <Link
+          href="/games/live"
+          className="block rounded-lg border border-red-500/20 bg-gradient-to-r from-red-500/10 via-zinc-900 to-zinc-900 p-3 hover:border-red-500/40 transition-all group"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center">
+                <Radio className="w-4 h-4 text-red-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-white">Live Room</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/15">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                    <span className="text-[9px] font-bold text-red-400">{liveGames.length} LIVE</span>
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-0.5">
+                  Track all your players across every live game
+                </p>
+              </div>
+            </div>
+            <span className="text-xs text-zinc-500 group-hover:text-zinc-300 transition-colors">
+              Enter →
+            </span>
+          </div>
+        </Link>
+      )}
+
       {/* Live games */}
       {liveGames.length > 0 && (
         <GameSection
