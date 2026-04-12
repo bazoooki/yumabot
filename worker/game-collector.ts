@@ -49,6 +49,8 @@ interface GameDetail {
   id: string;
   date: string;
   statusTyped: string;
+  minute: number;
+  periodType: string;
   homeScore: number;
   awayScore: number;
   homeTeam: { code: string; name: string };
@@ -124,6 +126,10 @@ const GAME_DETAIL_QUERY = gql`
       id
       date
       statusTyped
+      ... on Game {
+        minute
+        periodType
+      }
       homeScore
       awayScore
       homeTeam { code name }
@@ -181,10 +187,7 @@ function diffGameStats(
 ): { events: GameEvent[]; nextState: PrevState } {
   const events: GameEvent[] = [];
   const nextState: PrevState = new Map();
-  const matchMinute = Math.max(
-    0,
-    Math.round((Date.now() - new Date(game.date).getTime()) / 60000),
-  );
+  const matchMinute = Math.max(0, game.minute ?? 0);
 
   for (const ps of game.playerGameScores) {
     const slug = ps.anyPlayer.slug;

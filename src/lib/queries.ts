@@ -396,6 +396,10 @@ export const GAME_DETAIL_QUERY = gql`
       id
       date
       statusTyped
+      ... on Game {
+        minute
+        periodType
+      }
       homeScore
       awayScore
       homeTeam {

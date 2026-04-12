@@ -185,6 +185,8 @@ export interface GameDetail {
   id: string;
   date: string;
   statusTyped: string;
+  minute: number;
+  periodType: string;
   homeScore: number;
   awayScore: number;
   homeTeam: { code: string; name: string; slug: string; pictureUrl: string };

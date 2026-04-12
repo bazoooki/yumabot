@@ -46,7 +46,7 @@ export function useMultiGameStream({
   }, []);
 
   const getMatchMinute = useCallback((game: GameDetail) => {
-    return Math.max(0, Math.round((Date.now() - new Date(game.date).getTime()) / 60000));
+    return Math.max(0, game.minute ?? 0);
   }, []);
 
   /** Detect substitutions by tracking fieldStatus changes: ON_BENCH↔ON_FIELD */

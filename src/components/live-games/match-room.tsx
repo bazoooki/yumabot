@@ -352,7 +352,7 @@ function MatchHeader({
               {game.homeScore} - {game.awayScore}
             </p>
           )}
-          {isLive && <MatchMinuteBadge gameDate={game.date} />}
+          {isLive && <MatchMinuteBadge minute={game.minute} />}
           {isPlayed && (
             <span className="text-[11px] font-bold text-zinc-500 block mt-1">
               FT
@@ -401,28 +401,12 @@ function MatchHeader({
   );
 }
 
-function MatchMinuteBadge({ gameDate }: { gameDate: string }) {
-  const [minute, setMinute] = useState(() =>
-    Math.max(0, Math.round((Date.now() - new Date(gameDate).getTime()) / 60000)),
-  );
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMinute(
-        Math.max(
-          0,
-          Math.round((Date.now() - new Date(gameDate).getTime()) / 60000),
-        ),
-      );
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [gameDate]);
-
+function MatchMinuteBadge({ minute }: { minute: number }) {
   return (
     <span className="inline-flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full bg-red-500/20 border border-red-500/30">
       <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
       <span className="text-[11px] font-bold text-red-400 tabular-nums">
-        {minute}&apos;
+        {Math.max(0, minute ?? 0)}&apos;
       </span>
     </span>
   );
