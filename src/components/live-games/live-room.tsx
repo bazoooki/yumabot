@@ -486,15 +486,21 @@ function MiniScoreCard({
   const isLive = game.statusTyped === "playing";
   const homeScore = gameDetail?.homeScore ?? game.homeScore;
   const awayScore = gameDetail?.awayScore ?? game.awayScore;
+  const minute = gameDetail?.minute;
 
   return (
     <Link
       href={`/games/${game.id}`}
       className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800/30 transition-colors group"
     >
-      <div className="w-4 shrink-0 flex justify-center">
+      <div className="w-7 shrink-0 flex items-center justify-center gap-1">
         {isLive ? (
-          <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+          <>
+            <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
+            {minute != null && minute > 0 && (
+              <span className="text-[9px] font-bold text-red-400 tabular-nums">{minute}&apos;</span>
+            )}
+          </>
         ) : (
           <span className="text-[8px] text-zinc-600 font-bold">FT</span>
         )}

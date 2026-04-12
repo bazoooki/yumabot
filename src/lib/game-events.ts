@@ -61,7 +61,7 @@ const STAT_CONFIG: Record<string, { label: string; icon: string }> = {
   // Game events
   substitution: { label: "Substitution", icon: "🔄" },
   injury_sub: { label: "Injury Sub", icon: "🏥" },
-  adjusted_total_att_assist: { label: "Assist Adjusted", icon: "📝" },
+  adjusted_total_att_assist: { label: "Key Pass", icon: "🎯" },
   adjusted_total_scoring_att: { label: "Shot Adjusted", icon: "📝" },
 };
 
