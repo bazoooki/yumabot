@@ -53,6 +53,37 @@ function parseRows(rows: { leaderboardSlug: string; leaderboardName: string; lea
   return { leaderboards, allRankings };
 }
 
+/** Pre-compute the /api/results payload for a GW and cache it */
+export async function computeResultsForGW(gameWeek: number) {
+  const rows = await prisma.leaderboardResult.findMany({
+    where: { gameWeek },
+    orderBy: [{ leagueName: "asc" }, { division: "asc" }],
+  });
+  if (rows.length === 0) return null;
+
+  const { leaderboards } = parseRows(rows);
+  const payload = {
+    gameWeek,
+    fixtureSlug: rows[0].fixtureSlug,
+    leaderboards,
+  };
+
+  await prisma.computedResults.upsert({
+    where: { key: `results:${gameWeek}` },
+    create: {
+      key: `results:${gameWeek}`,
+      dataJson: JSON.stringify(payload),
+    },
+    update: {
+      dataJson: JSON.stringify(payload),
+      computedAt: new Date(),
+    },
+  });
+
+  console.log(`[compute] Cached results for GW ${gameWeek}: ${leaderboards.length} leaderboards`);
+  return payload;
+}
+
 /** Recompute achievements for a specific GW and cache */
 async function computeAchievementsForGW(gameWeek: number) {
   const rows = await prisma.leaderboardResult.findMany({
@@ -230,6 +261,7 @@ function formatClanRankings(rankings: ReturnType<typeof computePowerRankings>) {
 /** Run all computations after a GW scrape completes */
 export async function recomputeAllForGW(gameWeek: number) {
   console.log(`[compute] Starting recomputation for GW ${gameWeek}...`);
+  await computeResultsForGW(gameWeek);
   await computeAchievementsForGW(gameWeek);
   await computePowerRankingsForGW(gameWeek);
   await computeCumulativePowerRankings();
