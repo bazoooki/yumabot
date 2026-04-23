@@ -3,17 +3,21 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { useLineupStore, STREAK_LEVELS } from "@/lib/lineup-store";
-import { getStrategyMode } from "@/lib/ai-lineup";
+import { useLineupStore } from "@/lib/lineup-store";
 import { useLiveScores } from "@/lib/hooks";
 import { useMarketStore } from "@/lib/market/market-store";
 import { fetchFixture, countMyPlayers, formatGameTime } from "@/lib/fixtures";
 import { getKickoffUrgency } from "@/lib/utils";
-import type { SorareCard, FixtureGame, InSeasonCompetition } from "@/lib/types";
+import type {
+  SorareCard,
+  FixtureGame,
+  InSeasonCompetition,
+} from "@/lib/types";
 import { LineupCard } from "@/components/lineup-card/lineup-card";
+import { HotStreaksPanel } from "@/components/home/hot-streaks-panel";
 import {
   Target, Clock, ChevronRight, TrendingUp, Tv, Trophy,
-  BarChart3, AlertTriangle, Zap,
+  BarChart3, AlertTriangle,
 } from "lucide-react";
 import { LineupCardSkeleton } from "@/components/ui/skeleton";
 
@@ -38,10 +42,8 @@ async function fetchLiveLineups(userSlug: string) {
 }
 
 export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProps) {
-  const { currentLevel, slots, targetScore } = useLineupStore();
-  const streakLevel = STREAK_LEVELS.find((l) => l.level === currentLevel);
-  const mode = getStrategyMode(currentLevel);
-  const { isAnyGameLive, allGamesFinished, actualTotal, projectedTotal, filledCount } = useLiveScores();
+  const slots = useLineupStore((s) => s.slots);
+  const { filledCount } = useLiveScores();
   const hasLineup = slots.some((s) => s.card);
 
   // Market store (selectors to avoid over-rendering)
@@ -105,33 +107,6 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
     };
   }, [liveFixture, upcomingFixture, cards]);
 
-  // My live players — cards whose club is in a live game
-  const myLivePlayers = useMemo(() => {
-    const liveTeamCodes = new Set<string>();
-    for (const g of liveGames) {
-      liveTeamCodes.add(g.homeTeam.code);
-      liveTeamCodes.add(g.awayTeam.code);
-    }
-    if (liveTeamCodes.size === 0) return [];
-
-    const seen = new Set<string>();
-    return cards.filter((c) => {
-      const code = c.anyPlayer?.activeClub?.code;
-      const slug = c.anyPlayer?.slug;
-      if (!code || !slug || seen.has(slug)) return false;
-      if (!liveTeamCodes.has(code)) return false;
-      seen.add(slug);
-      return true;
-    });
-  }, [cards, liveGames]);
-
-  // Find the game for a live player
-  const gameForPlayer = (card: SorareCard): FixtureGame | undefined => {
-    const code = card.anyPlayer?.activeClub?.code;
-    if (!code) return undefined;
-    return liveGames.find((g) => g.homeTeam.code === code || g.awayTeam.code === code);
-  };
-
   // Top traded players from market
   const topTraded = useMemo(() => {
     const entries = Object.values(marketPlayers);
@@ -139,14 +114,6 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
       .sort((a, b) => b.saleCount - a.saleCount)
       .slice(0, 3);
   }, [marketPlayers]);
-
-  // Cumulative earnings
-  const cumulativeEarned = STREAK_LEVELS
-    .filter((l) => l.level < currentLevel)
-    .reduce((s, l) => s + parseFloat(l.reward.replace(/[$,]/g, "")), 0);
-
-  const liveTotal = isAnyGameLive ? projectedTotal : actualTotal;
-  const progressPct = targetScore > 0 ? Math.min(100, (liveTotal / targetScore) * 100) : 0;
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -183,46 +150,6 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
             </div>
           </div>
         )}
-
-        {/* ── Section 1: Compact Status Bar ── */}
-        <div className="flex flex-wrap items-center gap-2 md:gap-4 px-3 py-2.5 md:px-5 md:py-3 rounded-xl bg-zinc-900/80 border border-zinc-800">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-xs font-bold text-purple-400">
-              Lv.{currentLevel}
-            </span>
-            <span className="text-sm text-zinc-300">
-              {streakLevel?.threshold} pts &rarr; {streakLevel?.reward}
-            </span>
-          </div>
-          <div className={cn(
-            "px-2 py-1 rounded-md text-[10px] font-bold",
-            mode === "floor" ? "bg-green-500/15 text-green-400" :
-            mode === "balanced" ? "bg-blue-500/15 text-blue-400" :
-            "bg-amber-500/15 text-amber-400"
-          )}>
-            {mode === "floor" ? "FAST" : mode === "balanced" ? "BALANCED" : "SAFE"}
-          </div>
-          {cumulativeEarned > 0 && (
-            <span className="text-xs text-green-400">Earned: ${cumulativeEarned}</span>
-          )}
-          {hasLineup && (isAnyGameLive || allGamesFinished) && (
-            <div className="flex-1 flex items-center gap-3 ml-auto">
-              {isAnyGameLive && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />}
-              <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    progressPct >= 100 ? "bg-green-500" : "bg-purple-500"
-                  )}
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <span className="text-xs text-zinc-400 tabular-nums shrink-0">
-                {Math.round(liveTotal)}/{targetScore}
-              </span>
-            </div>
-          )}
-        </div>
 
         {/* ── Section 2: Quick Links ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
@@ -270,117 +197,15 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
           </button>
         </div>
 
-        {/* ── Section 3: Current Lineup + My Live Players ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-          {/* Current Lineup */}
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 md:p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Target className="w-4 h-4 text-purple-400" />
-              <h2 className="text-sm font-bold text-white">Current Lineup</h2>
-              {hasLineup && (
-                <button
-                  onClick={() => onNavigate("lineup")}
-                  className="ml-auto text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-0.5"
-                >
-                  Edit <ChevronRight className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-            {!hasLineup ? (
-              <div className="text-center py-6">
-                <p className="text-xs text-zinc-500 mb-3">No lineup set</p>
-                <button
-                  onClick={() => onNavigate("lineup")}
-                  className="px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-xs font-semibold text-white transition-colors"
-                >
-                  Build Lineup
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-1.5">
-                  {slots.map((slot, i) => (
-                    <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-zinc-800/40">
-                      <span className="text-[10px] font-bold text-zinc-500 w-6">{slot.position}</span>
-                      {slot.card ? (
-                        <>
-                          <span className="text-xs text-zinc-300 truncate flex-1">
-                            {slot.card.anyPlayer?.displayName ?? "—"}
-                          </span>
-                          {slot.isCaptain && (
-                            <span className="text-[9px] font-bold text-amber-400 bg-amber-500/15 px-1 rounded">C</span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-xs text-zinc-600 italic flex-1">Empty</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {(isAnyGameLive || allGamesFinished) && (
-                  <div className="mt-3 pt-3 border-t border-zinc-700/50">
-                    <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="text-zinc-400">
-                        {allGamesFinished
-                          ? actualTotal >= targetScore ? "Cleared!" : "Missed"
-                          : "Live"
-                        }
-                      </span>
-                      <span className={cn(
-                        "font-bold tabular-nums",
-                        liveTotal >= targetScore ? "text-green-400" : "text-zinc-300"
-                      )}>
-                        {Math.round(liveTotal)} / {targetScore}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all",
-                          progressPct >= 100 ? "bg-green-500" : "bg-purple-500"
-                        )}
-                        style={{ width: `${progressPct}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* My Live Players */}
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 md:p-5">
-            <div className="flex items-center gap-2 mb-4">
-              {myLivePlayers.length > 0 && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
-              <Zap className="w-4 h-4 text-green-400" />
-              <h2 className="text-sm font-bold text-white">My Live Players</h2>
-              <span className="text-[10px] text-zinc-500">{myLivePlayers.length}</span>
-            </div>
-            {myLivePlayers.length === 0 ? (
-              <p className="text-xs text-zinc-500 text-center py-6">No players in live games right now</p>
-            ) : (
-              <div className="space-y-1.5 max-h-[260px] overflow-y-auto">
-                {myLivePlayers.map((card) => {
-                  const player = card.anyPlayer!;
-                  const game = gameForPlayer(card);
-                  return (
-                    <div key={card.slug} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-zinc-800/40">
-                      <span className="text-[10px] font-bold text-zinc-500 w-6 shrink-0">
-                        {player.cardPositions?.[0]?.slice(0, 3).toUpperCase() ?? "—"}
-                      </span>
-                      <span className="text-xs text-zinc-300 truncate flex-1">{player.displayName}</span>
-                      <span className="text-[10px] text-zinc-600 shrink-0">{player.activeClub?.code}</span>
-                      {game && (
-                        <span className="text-[10px] text-zinc-500 tabular-nums shrink-0">
-                          {game.homeTeam.code} {game.homeScore}-{game.awayScore} {game.awayTeam.code}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        {/* ── Section 3: My Hot Streaks ── */}
+        <div className="md:w-1/2">
+          <HotStreaksPanel
+            liveCompetitions={lineupsData?.competitions}
+            liveLoading={lineupsLoading}
+            liveGameWeek={lineupsData?.gameWeek}
+            userSlug={userSlug}
+            onNavigate={onNavigate}
+          />
         </div>
 
         {/* ── Section 4: My Games ── */}
@@ -522,6 +347,7 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
     </div>
   );
 }
+
 
 function MiniGameCard({
   game,

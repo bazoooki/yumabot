@@ -1,13 +1,22 @@
 import { NextResponse } from "next/server";
 import { sorareClient } from "@/lib/sorare-client";
-import { IN_SEASON_LIVE_QUERY, IN_SEASON_UPCOMING_QUERY } from "@/lib/queries";
+import {
+  IN_SEASON_LIVE_QUERY,
+  IN_SEASON_UPCOMING_QUERY,
+  IN_SEASON_BY_FIXTURE_QUERY,
+} from "@/lib/queries";
+import {
+  parseEligibleOrSo5Rewards,
+  parseCompletedTasksRewards,
+  mergeRewardBreakdowns,
+} from "@/lib/rewards";
+import { parseStreak } from "@/lib/in-season/parse-streak";
 import type {
   RarityType,
   InSeasonCompetition,
   InSeasonTeam,
   InSeasonSlot,
   InSeasonStreak,
-  InSeasonThreshold,
 } from "@/lib/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -29,48 +38,12 @@ function parseSlot(appearance: any): InSeasonSlot {
     isCaptain: appearance.captain ?? false,
     score: appearance.score ?? null,
     scoreStatus: appearance.status ?? null,
+    projectedScore: pgs?.projectedScore ?? null,
+    projectionGrade: pgs?.projection?.grade ?? null,
     gameDate: game?.date ?? null,
     gameStatus: game?.statusTyped ?? null,
     gameHomeCode: game?.homeTeam?.code ?? null,
     gameAwayCode: game?.awayTeam?.code ?? null,
-  };
-}
-
-function parseStreak(task: any): InSeasonStreak | null {
-  if (!task?.thresholds) return null;
-
-  const currentIdx = task.thresholds.findIndex((th: any) => th.current);
-
-  const thresholds: InSeasonThreshold[] = task.thresholds.map(
-    (t: any, i: number) => {
-      const monetary = t.rewardConfigs?.find(
-        (r: any) => r.amount?.usdCents != null,
-      );
-      const coin = t.rewardConfigs?.find(
-        (r: any) => r.currency != null,
-      );
-      let reward = "";
-      if (monetary) {
-        reward = `$${Math.round(monetary.amount.usdCents / 100)}`;
-      } else if (coin) {
-        reward = `${coin.amount} coins`;
-      }
-
-      return {
-        level: i + 1,
-        score: t.score,
-        reward,
-        isCleared: currentIdx >= 0 ? i < currentIdx : false,
-        isCurrent: t.current ?? false,
-      };
-    },
-  );
-
-  const currentLevel = thresholds.findIndex((t) => t.isCurrent);
-  return {
-    currentLevel: currentLevel >= 0 ? currentLevel + 1 : 0,
-    streakCount: task.progress ?? 0,
-    thresholds,
   };
 }
 
@@ -99,9 +72,22 @@ function sortCompetitions(competitions: InSeasonCompetition[]) {
 
 // --- LIVE: fetch existing lineups via userFixtureResults ---
 
+/** A fixture is "final" when it's closed OR past its endDate. */
+function isFixtureFinal(fixture: any): boolean {
+  if (!fixture) return false;
+  if (fixture.aasmState === "closed") return true;
+  if (fixture.endDate) {
+    const end = new Date(fixture.endDate).getTime();
+    if (!Number.isNaN(end) && end < Date.now()) return true;
+  }
+  return false;
+}
+
 function parseLive(result: any, seasonalityFilter?: string): InSeasonCompetition[] {
+  const fixture = result?.so5?.so5Fixture;
+  const fixtureFinal = isFixtureFinal(fixture);
   const contenders =
-    result?.so5?.so5Fixture?.userFixtureResults?.so5LeaderboardContenders?.nodes ?? [];
+    fixture?.userFixtureResults?.so5LeaderboardContenders?.nodes ?? [];
 
   const filtered = seasonalityFilter === "all"
     ? contenders
@@ -127,10 +113,31 @@ function parseLive(result: any, seasonalityFilter?: string): InSeasonCompetition
     const teams: InSeasonTeam[] = group.map((contender: any) => {
       const lineup = contender.so5Lineup;
       if (!lineup) {
-        return { name: "Empty", lineupSlug: null, slots: [], totalScore: null, rewardMultiplier: 1, canEdit: true, ranking: null };
+        return {
+          name: "Empty",
+          lineupSlug: null,
+          slots: [],
+          totalScore: null,
+          rewardMultiplier: 1,
+          canEdit: true,
+          ranking: null,
+          rewardUsdCents: 0,
+          rewardEssence: [],
+          rewardIsActual: false,
+        };
       }
       const slots = (lineup.so5Appearances ?? []).map(parseSlot);
       const ranking = lineup.so5Rankings?.[0];
+      // Rewards = rank bracket + completed tasks (streak threshold payouts, etc.)
+      const rewards = parseEligibleOrSo5Rewards(
+        ranking?.eligibleOrSo5Rewards ?? [],
+      );
+      mergeRewardBreakdowns(
+        rewards,
+        parseCompletedTasksRewards(lineup.completedTasks ?? []),
+      );
+      // Past/closed fixture → rewards are final regardless of union branch.
+      const isActual = fixtureFinal || rewards.isActual;
       return {
         name: lineup.name ?? "Team",
         lineupSlug: contender.slug,
@@ -139,6 +146,9 @@ function parseLive(result: any, seasonalityFilter?: string): InSeasonCompetition
         rewardMultiplier: lineup.rewardMultiplier ?? 1,
         canEdit: lineup.canEdit ?? false,
         ranking: ranking?.ranking ?? null,
+        rewardUsdCents: rewards.usdCents,
+        rewardEssence: rewards.essence,
+        rewardIsActual: isActual,
       };
     });
 
@@ -192,6 +202,9 @@ function parseUpcoming(result: any): InSeasonCompetition[] {
           rewardMultiplier: 1,
           canEdit: true,
           ranking: null,
+          rewardUsdCents: 0,
+          rewardEssence: [],
+          rewardIsActual: false,
         }),
       );
 
@@ -225,18 +238,27 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userSlug = searchParams.get("userSlug");
   const fixtureType = searchParams.get("type") || "UPCOMING";
+  const fixtureSlug = searchParams.get("fixtureSlug") || undefined;
   const seasonality = searchParams.get("seasonality") || undefined;
 
-  if (!userSlug && fixtureType === "LIVE") {
+  // fixtureSlug mode treats the response like LIVE (userFixtureResults shape)
+  const isByFixture = Boolean(fixtureSlug);
+  const needsUser = fixtureType === "LIVE" || isByFixture;
+  if (!userSlug && needsUser) {
     return NextResponse.json(
-      { error: "userSlug is required for LIVE mode" },
+      { error: "userSlug is required for LIVE or fixtureSlug mode" },
       { status: 400 },
     );
   }
 
   try {
     let result: any;
-    if (fixtureType === "LIVE") {
+    if (isByFixture) {
+      result = await sorareClient.request(IN_SEASON_BY_FIXTURE_QUERY, {
+        userSlug,
+        fixtureSlug,
+      });
+    } else if (fixtureType === "LIVE") {
       result = await sorareClient.request(IN_SEASON_LIVE_QUERY, { userSlug });
     } else {
       result = await sorareClient.request(IN_SEASON_UPCOMING_QUERY);
@@ -251,7 +273,9 @@ export async function GET(request: Request) {
     }
 
     const competitions =
-      fixtureType === "LIVE" ? parseLive(result, seasonality) : parseUpcoming(result);
+      fixtureType === "LIVE" || isByFixture
+        ? parseLive(result, seasonality)
+        : parseUpcoming(result);
 
     return NextResponse.json({
       fixtureSlug: fixture.slug,

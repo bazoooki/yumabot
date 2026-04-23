@@ -182,10 +182,20 @@ export function getStrategyMode(level: number): StrategyMode {
   return "ceiling";
 }
 
+const GRADE_MULTIPLIERS: Record<string, number> = {
+  A: 1.15,
+  B: 1.05,
+  C: 1.00,
+  D: 0.90,
+  F: 0.75,
+};
+
 export function computeStrategyMetrics(
   card: SorareCard,
   scoreHistory?: number[] | null,
   startProbability?: number | null,
+  projectionGrade?: string | null,
+  projectedScore?: number | null,
 ): CardStrategyMetrics {
   const player = card.anyPlayer;
   const avgScore = player?.averageScore || 0;
@@ -197,9 +207,19 @@ export function computeStrategyMetrics(
   const clubCode = player?.activeClub?.code;
   const isHome = hasGame && upcomingGames[0]?.homeTeam?.code === clubCode;
 
-  let expectedScore = avgScore * power * (1 + editionInfo.bonus);
+  // If Sorare provides a projected score for the upcoming game, blend it with avgScore
+  // (70% projected, 30% average) — Sorare's model accounts for opponent, form, etc.
+  const baseScore = projectedScore && projectedScore > 0
+    ? projectedScore * 0.7 + avgScore * 0.3
+    : avgScore;
+
+  let expectedScore = baseScore * power * (1 + editionInfo.bonus);
   if (!hasGame) expectedScore = 0;
   if (isHome) expectedScore *= 1.05;
+
+  // Apply projection grade multiplier (A → +15%, D → −10%, etc.)
+  const gradeMult = projectionGrade ? (GRADE_MULTIPLIERS[projectionGrade.toUpperCase()] ?? 1) : 1;
+  expectedScore *= gradeMult;
 
   const isDetailed = !!scoreHistory && scoreHistory.length >= 3;
   let stdDev: number;
@@ -213,12 +233,12 @@ export function computeStrategyMetrics(
     const sorted = [...scoreHistory].sort((a, b) => a - b);
     const p5Index = Math.max(0, Math.floor(sorted.length * 0.05));
     const p95Index = Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95));
-    floor = sorted[p5Index] * power * (1 + editionInfo.bonus);
-    ceiling = sorted[p95Index] * power * (1 + editionInfo.bonus);
+    floor = sorted[p5Index] * power * (1 + editionInfo.bonus) * gradeMult;
+    ceiling = sorted[p95Index] * power * (1 + editionInfo.bonus) * gradeMult;
   } else {
     stdDev = POSITION_DEFAULT_STDDEV[position] || 14;
-    floor = Math.max(0, (avgScore - 1.65 * stdDev)) * power * (1 + editionInfo.bonus);
-    ceiling = (avgScore + 1.65 * stdDev) * power * (1 + editionInfo.bonus);
+    floor = Math.max(0, (baseScore - 1.65 * stdDev)) * power * (1 + editionInfo.bonus) * gradeMult;
+    ceiling = (baseScore + 1.65 * stdDev) * power * (1 + editionInfo.bonus) * gradeMult;
   }
 
   if (!hasGame) {
@@ -239,6 +259,7 @@ export function computeStrategyMetrics(
   floor *= startProb;
 
   // Classify strategy tag
+  const gradeLabel = projectionGrade ? ` (Grade ${projectionGrade})` : "";
   let strategyTag: StrategyTag;
   let strategyReason: string;
 
@@ -247,13 +268,13 @@ export function computeStrategyMetrics(
     strategyReason = !hasGame ? "No upcoming game" : "Low start probability";
   } else if (consistencyScore >= 65 && startProb >= 0.7) {
     strategyTag = "SAFE";
-    strategyReason = "Consistent pick — low variance";
-  } else if (ceiling >= avgScore * 1.4 * power) {
+    strategyReason = `Consistent pick — low variance${gradeLabel}`;
+  } else if (ceiling >= baseScore * 1.4 * power) {
     strategyTag = "CEILING";
-    strategyReason = "High upside — can explode";
+    strategyReason = `High upside — can explode${gradeLabel}`;
   } else {
     strategyTag = "BALANCED";
-    strategyReason = "Solid pick — moderate variance";
+    strategyReason = `Solid pick — moderate variance${gradeLabel}`;
   }
 
   return {
@@ -310,7 +331,7 @@ export function scoreCardsWithStrategy(
       const realProb = playerSlug && starterProbs?.[playerSlug] != null
         ? starterProbs[playerSlug]! / 100
         : undefined;
-      const strategy = computeStrategyMetrics(card, null, realProb ?? null);
+      const strategy = computeStrategyMetrics(card, null, realProb ?? null, intel?.projectionGrade, intel?.projectedScore);
       // Force RISKY for unavailable players
       if (base.isInjured) {
         strategy.strategyTag = "RISKY";
@@ -386,7 +407,8 @@ export async function recommendLineupWithStrategy(
         }
       }
 
-      const strategy = computeStrategyMetrics(sc.card, scoreValues, startProb);
+      const intelData = player.slug ? playerIntelMap?.[player.slug] : undefined;
+      const strategy = computeStrategyMetrics(sc.card, scoreValues, startProb, intelData?.projectionGrade, intelData?.projectedScore);
       const strategyScore = computeStrategyScore(strategy, level);
       return { ...sc, strategy, strategyScore };
     }),
@@ -661,7 +683,8 @@ export async function recommendInSeasonLineup(
       const intelProb = playerIntelMap?.[player.slug]?.starterProbability;
       const startProb = intelProb != null ? intelProb / 100 : 0.75;
 
-      const strategy = computeStrategyMetrics(sc.card, scoreValues, startProb);
+      const intelData = playerIntelMap?.[player.slug];
+      const strategy = computeStrategyMetrics(sc.card, scoreValues, startProb, intelData?.projectionGrade, intelData?.projectedScore);
       const level = mapThresholdToLevel(targetScore);
       const strategyScore = computeStrategyScore(strategy, level);
       return { ...sc, strategy, strategyScore };
@@ -731,7 +754,7 @@ export async function recommendInSeasonLineup(
 }
 
 // Approximation of standard normal CDF
-function normalCDF(z: number): number {
+export function normalCDF(z: number): number {
   if (z > 6) return 1;
   if (z < -6) return 0;
   const a1 = 0.254829592;

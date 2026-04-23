@@ -125,6 +125,10 @@ export const PLAYER_STARTER_ODDS_QUERY = gql`
         upcomingGames(first: 1) {
           playerGameScore(playerSlug: $slug) {
             scoreStatus
+            projectedScore
+            projection {
+              grade
+            }
             anyPlayerGameStats {
               ... on PlayerGameStats {
                 fieldStatus
@@ -242,108 +246,203 @@ export const CURRENT_FIXTURE_QUERY = gql`
   }
 `;
 
-// Fetches existing lineups for LIVE fixture (user already has contenders)
-export const IN_SEASON_LIVE_QUERY = gql`
-  query InSeasonLive($userSlug: String!) {
-    so5 {
-      so5Fixture(type: LIVE) {
-        slug
-        aasmState
-        gameWeek
-        endDate
-        userFixtureResults(userSlug: $userSlug) {
-          completedThresholdsStreakTasksCount
-          so5LeaderboardContenders(first: 50) {
-            nodes {
+// Shared body: everything inside `so5Fixture { ... }` for the lineups-per-user view.
+// Used by both the LIVE query and the by-slug query (historical GWs).
+const IN_SEASON_FIXTURE_BODY = `
+    slug
+    aasmState
+    gameWeek
+    endDate
+    userFixtureResults(userSlug: $userSlug) {
+      completedThresholdsStreakTasksCount
+      so5LeaderboardContenders(first: 50) {
+        nodes {
+          slug
+          so5Leaderboard {
+            slug
+            displayName
+            division
+            mainRarityType
+            seasonality
+            seasonalityName
+            teamsCap
+            cutOffDate
+            iconUrl
+            stadiumUrl
+            canCompose {
+              value
+            }
+            so5LeaderboardGroup {
+              displayName
+            }
+            so5League {
               slug
-              so5Leaderboard {
-                slug
-                displayName
-                division
-                mainRarityType
-                seasonality
-                seasonalityName
-                teamsCap
-                cutOffDate
-                iconUrl
-                stadiumUrl
-                canCompose {
-                  value
+              displayName
+            }
+          }
+          so5Lineup {
+            name
+            draft
+            canEdit
+            rewardMultiplier
+            hidden
+            hasLiveGames
+            completedTasks {
+              id
+              rewardConfigs {
+                __typename
+                ... on MonetaryRewardConfig {
+                  amount {
+                    usdCents
+                  }
                 }
-                so5LeaderboardGroup {
-                  displayName
+                ... on CardShardRewardConfig {
+                  rarity
+                  quantity
                 }
-                so5League {
-                  slug
-                  displayName
+                ... on CoinRewardConfig {
+                  amount
+                }
+                ... on CardRewardConfig {
+                  rarity
+                  gameplayTier
                 }
               }
-              so5Lineup {
-                name
-                draft
-                canEdit
-                rewardMultiplier
-                hidden
-                hasLiveGames
-                thresholdsStreakTask {
-                  progress
-                  target
-                  thresholds {
-                    score
-                    current
-                    rewardConfigs {
-                      ... on MonetaryRewardConfig {
-                        amount {
-                          usdCents
-                        }
-                      }
-                      ... on CoinRewardConfig {
-                        amount
-                      }
+            }
+            thresholdsStreakTask {
+              progress
+              target
+              thresholds {
+                score
+                current
+                rewardConfigs {
+                  __typename
+                  ... on MonetaryRewardConfig {
+                    amount {
+                      usdCents
                     }
                   }
-                  currentThreshold {
-                    score
+                  ... on CoinRewardConfig {
+                    amount
+                  }
+                  ... on CardShardRewardConfig {
+                    rarity
+                    quantity
+                  }
+                  ... on CardRewardConfig {
+                    rarity
+                    gameplayTier
                   }
                 }
-                so5Appearances {
-                  index
-                  captain
-                  score
-                  status
-                  anyCard {
-                    slug
-                    rarityTyped
+              }
+              currentThreshold {
+                score
+              }
+            }
+            so5Appearances {
+              index
+              captain
+              score
+              status
+              anyCard {
+                slug
+                rarityTyped
+                pictureUrl
+              }
+              anyPlayer {
+                displayName
+                slug
+                squaredPictureUrl
+              }
+              playerGameScore {
+                score
+                scoreStatus
+                projectedScore
+                projection {
+                  grade
+                }
+                anyGame {
+                  date
+                  statusTyped
+                  homeTeam {
+                    code
+                  }
+                  awayTeam {
+                    code
+                  }
+                }
+              }
+            }
+            so5Rankings {
+              score
+              ranking
+              eligibleOrSo5Rewards {
+                __typename
+                ... on So5Reward {
+                  amount {
+                    usdCents
+                    referenceCurrency
+                  }
+                  coinAmount
+                  rewardCards {
+                    id
                     pictureUrl
+                    quality
+                    anyCard {
+                      slug
+                      rarityTyped
+                    }
                   }
-                  anyPlayer {
-                    displayName
-                    slug
-                    squaredPictureUrl
-                  }
-                  playerGameScore {
-                    score
-                    scoreStatus
-                    anyGame {
-                      date
-                      statusTyped
-                      homeTeam {
-                        code
-                      }
-                      awayTeam {
-                        code
-                      }
+                  rewardConfigs {
+                    __typename
+                    ... on CardShardRewardConfig {
+                      rarity
+                      quantity
                     }
                   }
                 }
-                so5Rankings {
-                  score
-                  ranking
+                ... on So5RewardConfig {
+                  fromRank
+                  toRank
+                  sharedPool
+                  poolSize
+                  usdAmount
+                  coinAmount
+                  cardShardRewardConfigs {
+                    rarity
+                    quantity
+                  }
+                  cards {
+                    rarity
+                    quantity
+                    gameplayTier
+                  }
                 }
               }
             }
           }
         }
+      }
+    }
+`;
+
+// Fetches existing lineups for LIVE fixture (user already has contenders)
+export const IN_SEASON_LIVE_QUERY = gql`
+  query InSeasonLive($userSlug: String!) {
+    so5 {
+      so5Fixture(type: LIVE) {
+        ${IN_SEASON_FIXTURE_BODY}
+      }
+    }
+  }
+`;
+
+// Fetches a user's lineups for a specific past fixture (closed GW)
+export const IN_SEASON_BY_FIXTURE_QUERY = gql`
+  query InSeasonByFixture($userSlug: String!, $fixtureSlug: String!) {
+    so5 {
+      so5Fixture(slug: $fixtureSlug) {
+        ${IN_SEASON_FIXTURE_BODY}
       }
     }
   }
@@ -482,6 +581,8 @@ export const FIXTURE_LEADERBOARDS_QUERY = gql`
             displayName
             division
             mainRarityType
+            seasonality
+            isArena
             so5LineupsCount
             so5League {
               slug
@@ -528,6 +629,8 @@ export const FIXTURE_LEADERBOARDS_BY_SLUG_QUERY = gql`
             displayName
             division
             mainRarityType
+            seasonality
+            isArena
             so5LineupsCount
             so5League {
               slug
@@ -543,6 +646,10 @@ export const FIXTURE_LEADERBOARDS_BY_SLUG_QUERY = gql`
   }
 `;
 
+// Keep this query lean — Sorare caps GraphQL complexity at 30,000 per request,
+// and every field inside `nodes` is multiplied by pageSize (50) + nested list
+// depths. Anything that isn't essential for per-user $ / essence aggregation
+// is fetched via a separate one-shot query.
 export const LEADERBOARD_RANKINGS_QUERY = gql`
   query LeaderboardRankings($slug: String!, $page: Int!, $pageSize: Int!) {
     so5 {
@@ -560,7 +667,48 @@ export const LEADERBOARD_RANKINGS_QUERY = gql`
               nickname
               pictureUrl
             }
+            eligibleOrSo5Rewards {
+              __typename
+              ... on So5Reward {
+                amount {
+                  usdCents
+                }
+                coinAmount
+                rewardConfigs {
+                  __typename
+                  ... on CardShardRewardConfig {
+                    rarity
+                    quantity
+                  }
+                }
+              }
+              ... on So5RewardConfig {
+                fromRank
+                toRank
+                usdAmount
+                coinAmount
+                cardShardRewardConfigs {
+                  rarity
+                  quantity
+                }
+              }
+            }
             so5Lineup {
+              completedTasks {
+                id
+                rewardConfigs {
+                  __typename
+                  ... on MonetaryRewardConfig {
+                    amount {
+                      usdCents
+                    }
+                  }
+                  ... on CardShardRewardConfig {
+                    rarity
+                    quantity
+                  }
+                }
+              }
               so5Appearances {
                 index
                 captain
@@ -574,6 +722,93 @@ export const LEADERBOARD_RANKINGS_QUERY = gql`
                   slug
                 }
               }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// One-shot query for the streak thresholds of a leaderboard.
+// Returns just the first ranking's lineup's ThresholdsStreakTask — thresholds
+// are identical for every user in the same leaderboard, so one sample suffices.
+// Kept tiny (pageSize: 1) to stay well under the GraphQL complexity cap.
+export const LEADERBOARD_STREAK_QUERY = gql`
+  query LeaderboardStreak($slug: String!) {
+    so5 {
+      so5Leaderboard(slug: $slug) {
+        slug
+        so5RankingsPaginated(page: 1, pageSize: 1) {
+          nodes {
+            so5Lineup {
+              thresholdsStreakTask {
+                progress
+                target
+                thresholds {
+                  score
+                  current
+                  rewardConfigs {
+                    __typename
+                    ... on MonetaryRewardConfig {
+                      amount {
+                        usdCents
+                      }
+                    }
+                    ... on CardShardRewardConfig {
+                      rarity
+                      quantity
+                    }
+                    ... on CoinRewardConfig {
+                      amount
+                    }
+                    ... on CardRewardConfig {
+                      rarity
+                      gameplayTier
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// Enumerates all in-season leaderboards for the UPCOMING GW. We fetch this
+// separately from IN_SEASON_LIVE_QUERY so the Hot Streaks panel can show
+// competitions the user hasn't entered yet — streak state comes from the live
+// fetch and is merged client-side.
+//
+// Note: the `myThresholdsStreakTask` field on So5LeagueTrack requires session
+// auth (not APIKEY) and is therefore intentionally omitted here.
+export const MY_IN_SEASON_STREAKS_QUERY = gql`
+  query MyInSeasonStreaks {
+    so5 {
+      so5Fixture(type: UPCOMING) {
+        slug
+        gameWeek
+        endDate
+        aasmState
+        so5Leagues {
+          slug
+          displayName
+          iconUrl
+          so5Leaderboards(notRooms: true) {
+            slug
+            displayName
+            division
+            mainRarityType
+            seasonality
+            iconUrl
+            so5LeaderboardGroup {
+              displayName
+            }
+            so5League {
+              slug
+              displayName
             }
           }
         }
