@@ -72,13 +72,24 @@ interface WorkspaceState {
   dirty: boolean;
 }
 
+export interface WorkspacePayloadInput {
+  teams?: Array<{
+    name?: string;
+    slots?: Partial<SlotMap> | Record<string, string | null>;
+    captain?: string | null;
+  }>;
+  teamCount?: number;
+  targetIdx?: number;
+  notes?: string;
+}
+
 interface WorkspaceActions {
   hydrate(args: {
     userSlug: string;
     forUserSlug: string;
     competitionSlug: string;
     fixtureSlug: string;
-    payload?: WorkspacePayload | null;
+    payload?: WorkspacePayloadInput | null;
   }): void;
   drop(payload: DragPayload, target: { teamId: number; position: LineupPosition }): void;
   dropToPool(payload: DragPayload): void;
@@ -116,18 +127,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   hydrate: ({ userSlug, forUserSlug, competitionSlug, fixtureSlug, payload }) => {
     const fresh = initialTeams();
-    const teams = payload?.teams
-      ? fresh.map((t, i) => {
-          const incoming = payload.teams[i];
-          if (!incoming) return t;
-          return {
-            id: i,
-            name: incoming.name ?? t.name,
-            slots: { ...emptySlots(), ...(incoming.slots ?? {}) },
-            captain: incoming.captain ?? null,
-          };
-        })
-      : fresh;
+    const incomingTeams = payload?.teams ?? [];
+    const teams = fresh.map((t, i) => {
+      const incoming = incomingTeams[i];
+      if (!incoming) return t;
+      return {
+        id: i,
+        name: incoming.name ?? t.name,
+        slots: { ...emptySlots(), ...(incoming.slots ?? {}) },
+        captain: incoming.captain ?? null,
+      };
+    });
 
     set({
       userSlug,
