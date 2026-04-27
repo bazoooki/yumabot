@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -122,10 +122,13 @@ export function InSeasonWorkspace({
     staleTime: 5 * 60 * 1000,
   });
 
-  const galleryCards: SorareCard[] =
-    forUserSlug && forUserSlug !== userSlug
-      ? (helperCardsQuery.data ?? [])
-      : ownCards;
+  const galleryCards = useMemo<SorareCard[]>(
+    () =>
+      forUserSlug && forUserSlug !== userSlug
+        ? (helperCardsQuery.data ?? [])
+        : ownCards,
+    [forUserSlug, userSlug, helperCardsQuery.data, ownCards],
+  );
 
   const cardsBySlug = useMemo(() => {
     const m = new Map<string, SorareCard>();
@@ -332,7 +335,11 @@ function WorkspaceMain({
         targetIdx={targetIdx}
         onTargetChange={setTargetIdx}
       />
-      <TeamsRow cardsBySlug={cardsBySlug} target={target} />
+      <TeamsRow
+        competition={selected}
+        cardsBySlug={cardsBySlug}
+        target={target}
+      />
     </>
   );
 }
@@ -342,10 +349,10 @@ function SaveIndicator({
 }: {
   status: { savedAt: Date | null; isFlushing: boolean; error: string | null };
 }) {
-  const [tick, setTick] = useState(0);
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     if (!status.savedAt) return;
-    const id = setInterval(() => setTick((t) => t + 1), 15_000);
+    const id = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(id);
   }, [status.savedAt]);
 
@@ -355,8 +362,8 @@ function SaveIndicator({
   if (status.isFlushing) {
     return <span className="text-zinc-500">Saving…</span>;
   }
-  if (status.savedAt) {
-    const ageSec = Math.floor((Date.now() - status.savedAt.getTime()) / 1000);
+  if (status.savedAt && now != null) {
+    const ageSec = Math.floor((now - status.savedAt.getTime()) / 1000);
     const label =
       ageSec < 5
         ? "just now"
@@ -365,12 +372,14 @@ function SaveIndicator({
           : ageSec < 3600
             ? `${Math.floor(ageSec / 60)}m ago`
             : status.savedAt.toLocaleTimeString();
-    void tick;
     return (
       <span className="text-zinc-500" title={status.savedAt.toLocaleString()}>
         Saved · {label}
       </span>
     );
+  }
+  if (status.savedAt) {
+    return <span className="text-zinc-500">Saved</span>;
   }
   return null;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import type { SorareCard } from "@/lib/types";
+import type { InSeasonCompetition, SorareCard } from "@/lib/types";
 import {
   selectVisibleTeams,
   useWorkspaceStore,
@@ -9,11 +9,12 @@ import {
 import { TeamColumn } from "./team-column";
 
 interface TeamsRowProps {
+  competition: InSeasonCompetition;
   cardsBySlug: Map<string, SorareCard>;
   target: number;
 }
 
-export function TeamsRow({ cardsBySlug, target }: TeamsRowProps) {
+export function TeamsRow({ competition, cardsBySlug, target }: TeamsRowProps) {
   const teams = useWorkspaceStore(selectVisibleTeams);
   const teamCount = useWorkspaceStore((s) => s.teamCount);
   const setTeamCount = useWorkspaceStore((s) => s.setTeamCount);
@@ -29,6 +30,7 @@ export function TeamsRow({ cardsBySlug, target }: TeamsRowProps) {
             totalTeams={teamCount}
             cardsBySlug={cardsBySlug}
             target={target}
+            competition={competition}
           />
         ))}
         {teamCount < 4 && (

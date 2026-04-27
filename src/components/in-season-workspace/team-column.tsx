@@ -1,13 +1,24 @@
 "use client";
 
-import { Wand2, X, Star, Zap } from "lucide-react";
-import type { LineupPosition, SorareCard } from "@/lib/types";
+import { useMemo, useState } from "react";
+import { Wand2, X, Star, Zap, AlertTriangle, CheckCircle2 } from "lucide-react";
+import type {
+  InSeasonCompetition,
+  InSeasonLineupSlot,
+  LineupPosition,
+  SorareCard,
+} from "@/lib/types";
 import {
   POS_ORDER,
   useWorkspaceStore,
   type WorkspaceTeam,
 } from "@/lib/in-season/workspace-store";
 import { estimateTotalScore } from "@/lib/ai-lineup";
+import {
+  validateInSeasonLineup,
+  type ValidationResult,
+} from "@/lib/in-season-validation";
+import { isEligibleForCompetition } from "@/lib/in-season/eligibility";
 import { cn } from "@/lib/utils";
 import { TONE, TEAM_TONES } from "./tones";
 import { TeamSlot } from "./team-slot";
@@ -18,6 +29,7 @@ interface TeamColumnProps {
   totalTeams: number;
   cardsBySlug: Map<string, SorareCard>;
   target: number;
+  competition: InSeasonCompetition;
 }
 
 export function TeamColumn({
@@ -26,6 +38,7 @@ export function TeamColumn({
   totalTeams,
   cardsBySlug,
   target,
+  competition,
 }: TeamColumnProps) {
   const tone = TONE[TEAM_TONES[idx]];
   const players = POS_ORDER.map((pos) => {
@@ -48,11 +61,27 @@ export function TeamColumn({
         ? TONE.amber
         : TONE.pink;
 
-  // "in-season" count placeholder — real counter wired in C.6 via the
-  // validator. For now match the mock and count cards with any track.
+  // Validation: convert team into the validator's InSeasonLineupSlot[] shape.
+  const validation: ValidationResult = useMemo(() => {
+    const lineupSlots: InSeasonLineupSlot[] = POS_ORDER.map((pos) => {
+      const slug = team.slots[pos];
+      const card = slug ? (cardsBySlug.get(slug) ?? null) : null;
+      return {
+        position: pos,
+        card,
+        isCaptain: !!card && team.captain === card.slug,
+      };
+    });
+    return validateInSeasonLineup(lineupSlots, competition);
+  }, [team, cardsBySlug, competition]);
+
   const inSeasonCount = players.filter(
-    (p) => (p?.eligibleUpcomingLeagueTracks?.length ?? 0) > 0,
+    (p) => p && isEligibleForCompetition(p, competition),
   ).length;
+
+  const hasError = validation.messages.some((m) => m.type === "error");
+  const hasWarning =
+    !hasError && validation.messages.some((m) => m.type === "warning");
 
   const widthCls =
     totalTeams === 1
@@ -94,6 +123,12 @@ export function TeamColumn({
           value={team.name}
           onChange={(e) => rename(team.id, e.target.value)}
           className="flex-1 bg-transparent text-[12px] font-semibold text-zinc-100 outline-none focus:bg-zinc-950/50 rounded px-1 py-0.5 min-w-0"
+        />
+        <ValidationStatus
+          hasError={hasError}
+          hasWarning={hasWarning}
+          isComplete={filled === 5 && !hasError}
+          messages={validation.messages}
         />
         <span
           className={cn(
@@ -198,6 +233,66 @@ export function TeamColumn({
           {team.captain ? "Captain set" : "Pick captain"}
         </span>
       </div>
+    </div>
+  );
+}
+
+function ValidationStatus({
+  hasError,
+  hasWarning,
+  isComplete,
+  messages,
+}: {
+  hasError: boolean;
+  hasWarning: boolean;
+  isComplete: boolean;
+  messages: ValidationResult["messages"];
+}) {
+  const [open, setOpen] = useState(false);
+  const visible = messages.filter(
+    (m) => m.type === "error" || m.type === "warning",
+  );
+  if (visible.length === 0 && !isComplete) return null;
+
+  const tone = hasError
+    ? "text-red-400"
+    : hasWarning
+      ? "text-amber-400"
+      : "text-emerald-400";
+  const Icon = hasError || hasWarning ? AlertTriangle : CheckCircle2;
+  const label = hasError ? "issues" : hasWarning ? "warnings" : "valid";
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "w-5 h-5 grid place-items-center rounded-full border border-zinc-800 bg-zinc-950/60 hover:bg-zinc-900",
+          tone,
+        )}
+        title={label}
+      >
+        <Icon className="w-3 h-3" />
+      </button>
+      {open && visible.length > 0 && (
+        <div className="absolute z-30 right-0 top-7 w-72 rounded-lg border border-zinc-800 bg-zinc-950 shadow-xl p-2 space-y-1.5">
+          {visible.map((m, i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex items-start gap-2 px-2 py-1.5 rounded text-[11px] leading-snug",
+                m.type === "error"
+                  ? "bg-red-500/10 text-red-300 border border-red-500/20"
+                  : "bg-yellow-500/10 text-yellow-300 border border-yellow-500/20",
+              )}
+            >
+              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+              <span>{m.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
