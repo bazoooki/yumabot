@@ -1,4 +1,5 @@
 import type { InSeasonLineupSlot, InSeasonCompetition, PlayerIntel } from "./types";
+import { isEligibleForCompetition } from "./in-season/eligibility";
 
 export interface ValidationMessage {
   type: "error" | "warning" | "info" | "success";

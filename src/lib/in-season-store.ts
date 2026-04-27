@@ -12,6 +12,7 @@ import type {
 import { positionMatchesSlot } from "./normalization";
 import { recommendInSeasonLineup, mapThresholdToLevel } from "./ai-lineup";
 import { planGameweek } from "./gw-optimizer";
+import { isEligibleForCompetition } from "./in-season/eligibility";
 
 const DEFAULT_SLOTS: InSeasonLineupSlot[] = [
   { position: "GK", card: null, isCaptain: false },
