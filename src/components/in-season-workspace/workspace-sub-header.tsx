@@ -5,12 +5,19 @@ import type { InSeasonCompetition } from "@/lib/types";
 import { RARITY_CONFIG } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { TONE, TEAM_TONES, toneForSlug } from "./tones";
+import {
+  PlayModeChips,
+  type PlayMode,
+} from "@/components/ai/play-mode-chips";
 
 interface SubHeaderProps {
   comp: InSeasonCompetition;
   eligibleCount: number;
   teamCount: number;
   onTeamCountChange(n: number): void;
+  playMode: PlayMode;
+  effectivePlayMode: PlayMode;
+  onPlayModeChange(mode: PlayMode): void;
 }
 
 export function WorkspaceSubHeader({
@@ -18,6 +25,9 @@ export function WorkspaceSubHeader({
   eligibleCount,
   teamCount,
   onTeamCountChange,
+  playMode,
+  effectivePlayMode,
+  onPlayModeChange,
 }: SubHeaderProps) {
   const tone = TONE[toneForSlug(comp.slug)];
   const rarity = RARITY_CONFIG[comp.mainRarityType] ?? {
@@ -50,7 +60,19 @@ export function WorkspaceSubHeader({
         {eligibleCount} eligible cards
       </span>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <span className="mono text-[10px] uppercase tracking-wider text-zinc-500">
+            Mode
+          </span>
+          <div className="w-[210px]">
+            <PlayModeChips
+              selected={playMode}
+              effective={effectivePlayMode}
+              onChange={(m) => onPlayModeChange(playMode === m ? "auto" : m)}
+            />
+          </div>
+        </div>
         <span className="mono text-[10px] uppercase tracking-wider text-zinc-500">
           Teams
         </span>

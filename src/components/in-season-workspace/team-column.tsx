@@ -1,7 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Wand2, X, Star, Zap, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  Wand2,
+  X,
+  Star,
+  Zap,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 import type {
   InSeasonCompetition,
   InSeasonLineupSlot,
@@ -11,17 +19,24 @@ import type {
 import {
   POS_ORDER,
   useWorkspaceStore,
+  type SlotMap,
   type WorkspaceTeam,
 } from "@/lib/in-season/workspace-store";
-import { estimateTotalScore } from "@/lib/ai-lineup";
+import { estimateTotalScore, recommendInSeasonLineup } from "@/lib/ai-lineup";
+import { positionMatchesSlot } from "@/lib/normalization";
 import {
   validateInSeasonLineup,
   type ValidationResult,
 } from "@/lib/in-season-validation";
-import { isEligibleForCompetition } from "@/lib/in-season/eligibility";
+import {
+  isCrossLeagueCompetition,
+  isEligibleForCompetition,
+} from "@/lib/in-season/eligibility";
+import { usePlayerIntel } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { TONE, TEAM_TONES } from "./tones";
 import { TeamSlot } from "./team-slot";
+import { WinProbCard } from "@/components/ai/win-prob-card";
 
 interface TeamColumnProps {
   team: WorkspaceTeam;
@@ -95,6 +110,104 @@ export function TeamColumn({
   const rename = useWorkspaceStore((s) => s.rename);
   const closeTeam = useWorkspaceStore((s) => s.closeTeam);
   const clearTeam = useWorkspaceStore((s) => s.clearTeam);
+  const setTeam = useWorkspaceStore((s) => s.setTeam);
+
+  // AI Fill — score+place 5 cards into this team's slots, captain on the
+  // top-projection card. Excludes cards already used in OTHER teams of the
+  // same workspace so siblings don't fight over the same player.
+  const galleryCards = useMemo(
+    () => Array.from(cardsBySlug.values()),
+    [cardsBySlug],
+  );
+  const playerIntel = usePlayerIntel(galleryCards);
+  const [isFilling, setIsFilling] = useState(false);
+
+  const handleAIFill = useCallback(async () => {
+    if (isFilling) return;
+    setIsFilling(true);
+    try {
+      const allTeams = useWorkspaceStore.getState().teams;
+      const usedInOthers = new Set<string>();
+      for (const t of allTeams) {
+        if (t.id === team.id) continue;
+        for (const slug of Object.values(t.slots)) {
+          if (slug) usedInOthers.add(slug);
+        }
+      }
+      const isCrossLeague = isCrossLeagueCompetition(competition.leagueName);
+      const { lineup } = await recommendInSeasonLineup(
+        galleryCards,
+        {
+          allowedRarities: [competition.mainRarityType],
+          leagueRestriction: isCrossLeague ? null : competition.leagueName,
+          minInSeasonCards: 4,
+        },
+        target,
+        playerIntel ?? null,
+        usedInOthers,
+      );
+
+      // Place each suggested card into a position-matching empty slot, with
+      // EX as the wildcard fallback. Avoid duplicate players.
+      const nextSlots: SlotMap = {
+        GK: null,
+        DEF: null,
+        MID: null,
+        FWD: null,
+        EX: null,
+      };
+      const placedPlayerSlugs = new Set<string>();
+      for (const sc of lineup) {
+        const card = sc.card;
+        const playerSlug = card.anyPlayer?.slug ?? card.slug;
+        if (placedPlayerSlugs.has(playerSlug)) continue;
+        const primaryPos = card.anyPlayer?.cardPositions?.[0];
+        let bestSlot: LineupPosition | null = null;
+        for (const pos of POS_ORDER) {
+          if (nextSlots[pos]) continue;
+          if (positionMatchesSlot(primaryPos, pos)) {
+            bestSlot = pos;
+            break;
+          }
+        }
+        if (!bestSlot && !nextSlots.EX) {
+          bestSlot = "EX";
+        }
+        if (bestSlot) {
+          nextSlots[bestSlot] = card.slug;
+          placedPlayerSlugs.add(playerSlug);
+        }
+      }
+
+      // Captain = highest expectedScore among placed cards.
+      let bestCaptain: string | null = null;
+      let bestScore = -1;
+      for (const pos of POS_ORDER) {
+        const slug = nextSlots[pos];
+        if (!slug) continue;
+        const sc = lineup.find((l) => l.card.slug === slug);
+        if (sc && sc.strategy.expectedScore > bestScore) {
+          bestScore = sc.strategy.expectedScore;
+          bestCaptain = slug;
+        }
+      }
+
+      setTeam(team.id, nextSlots, bestCaptain);
+    } catch (err) {
+      console.error("[AI Fill] failed:", err);
+    } finally {
+      setIsFilling(false);
+    }
+  }, [
+    isFilling,
+    team.id,
+    galleryCards,
+    competition.leagueName,
+    competition.mainRarityType,
+    target,
+    playerIntel,
+    setTeam,
+  ]);
 
   return (
     <div
@@ -194,6 +307,25 @@ export function TeamColumn({
         </div>
       </div>
 
+      {/* Win prob card — only when at least one card is placed. Variant
+          maps the simple "did we beat the target" classification to the
+          recommender's safe/balanced/ceiling palette. */}
+      {filled > 0 && (
+        <div className="px-2 pt-2">
+          <WinProbCard
+            expected={score}
+            successProbability={Math.min(1, Math.max(0, score / Math.max(target, 1)))}
+            variant={
+              targetState === "hit"
+                ? "safe"
+                : targetState === "near"
+                  ? "balanced"
+                  : "ceiling"
+            }
+          />
+        </div>
+      )}
+
       {/* Slots */}
       <div className="flex-1 p-2 space-y-1.5">
         {(POS_ORDER as ReadonlyArray<LineupPosition>).map((pos) => (
@@ -216,10 +348,16 @@ export function TeamColumn({
       <div className="px-2 py-1.5 border-t border-zinc-800/80 flex items-center gap-1">
         <button
           type="button"
-          // TODO C.4/D.1: wire AI fill on this team
-          className="mono text-[9px] uppercase tracking-wide text-zinc-500 hover:text-zinc-200 px-1.5 py-1 rounded hover:bg-zinc-800/60 flex items-center gap-1"
+          onClick={handleAIFill}
+          disabled={isFilling || galleryCards.length === 0}
+          className="mono text-[9px] uppercase tracking-wide text-zinc-500 hover:text-purple-300 px-1.5 py-1 rounded hover:bg-purple-500/10 flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait"
         >
-          <Wand2 className="w-3 h-3" /> AI Fill
+          {isFilling ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Wand2 className="w-3 h-3" />
+          )}
+          AI Fill
         </button>
         <button
           type="button"

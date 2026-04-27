@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { LineupPosition } from "@/lib/types";
+import type { PlayMode } from "@/components/ai/play-mode-chips";
 
 export const POS_ORDER: ReadonlyArray<LineupPosition> = [
   "GK",
@@ -31,6 +32,7 @@ export interface WorkspacePayload {
   teamCount: number; // 1..4
   targetIdx: number; // index into competition.streak.thresholds
   notes: string;
+  playMode: PlayMode;
 }
 
 const TEAM_NAMES = ["Team A", "Team B", "Team C", "Team D"];
@@ -66,6 +68,7 @@ interface WorkspaceState {
   teamCount: number;
   targetIdx: number;
   notes: string;
+  playMode: PlayMode;
 
   // Ephemeral
   drag: DragPayload | null;
@@ -81,6 +84,7 @@ export interface WorkspacePayloadInput {
   teamCount?: number;
   targetIdx?: number;
   notes?: string;
+  playMode?: PlayMode;
 }
 
 interface WorkspaceActions {
@@ -100,6 +104,7 @@ interface WorkspaceActions {
   setTeamCount(n: number): void;
   setTargetIdx(i: number): void;
   setNotes(text: string): void;
+  setPlayMode(mode: PlayMode): void;
   setDrag(d: DragPayload | null): void;
   clearTeam(teamId: number): void;
   setTeam(teamId: number, slots: SlotMap, captain: string | null): void;
@@ -118,6 +123,7 @@ const initialState: WorkspaceState = {
   teamCount: 2,
   targetIdx: 0,
   notes: "",
+  playMode: "auto",
   drag: null,
   dirty: false,
 };
@@ -148,6 +154,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       teamCount: payload?.teamCount ?? 2,
       targetIdx: payload?.targetIdx ?? 0,
       notes: payload?.notes ?? "",
+      playMode: payload?.playMode ?? "auto",
       drag: null,
       dirty: false,
     });
@@ -277,6 +284,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       state.notes === text ? state : { notes: text, dirty: true },
     ),
 
+  setPlayMode: (mode) =>
+    set((state) =>
+      state.playMode === mode ? state : { playMode: mode, dirty: true },
+    ),
+
   setDrag: (d) => set({ drag: d }),
 
   clearTeam: (teamId) =>
@@ -318,5 +330,6 @@ export function selectWorkspacePayload(state: WorkspaceStore): WorkspacePayload 
     teamCount: state.teamCount,
     targetIdx: state.targetIdx,
     notes: state.notes,
+    playMode: state.playMode,
   };
 }

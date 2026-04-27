@@ -15,6 +15,7 @@ import { CardPool } from "./card-pool";
 import { DragIndicator } from "./drag-indicator";
 import { NotesDrawer } from "./notes-drawer";
 import { GwStrip, type GwStripFixture } from "./gw-strip";
+import { AITakeDrawer } from "./ai-take-drawer";
 
 /**
  * Within a fixture's competitions, return the representative leaderboard for
@@ -417,8 +418,10 @@ function WorkspaceMain({
 }) {
   const teamCount = useWorkspaceStore((s) => s.teamCount);
   const targetIdx = useWorkspaceStore((s) => s.targetIdx);
+  const playMode = useWorkspaceStore((s) => s.playMode);
   const setTeamCount = useWorkspaceStore((s) => s.setTeamCount);
   const setTargetIdx = useWorkspaceStore((s) => s.setTargetIdx);
+  const setPlayMode = useWorkspaceStore((s) => s.setPlayMode);
 
   // Resolve the active threshold score (mirrors ThresholdStrip's fallback).
   const thresholds = selected.streak?.thresholds ?? [];
@@ -428,6 +431,17 @@ function WorkspaceMain({
     fallback[targetIdx] ??
     fallback[fallback.length - 1];
 
+  // When playMode is "auto", derive an effective mode from the chosen target
+  // tier — fast for low targets, balanced in the middle, safe at the top.
+  const effectivePlayMode =
+    playMode !== "auto"
+      ? playMode
+      : targetIdx <= 1
+        ? "fast"
+        : targetIdx === 2
+          ? "balanced"
+          : "safe";
+
   return (
     <>
       <WorkspaceSubHeader
@@ -435,11 +449,23 @@ function WorkspaceMain({
         eligibleCount={selected.eligibleCardCount}
         teamCount={teamCount}
         onTeamCountChange={setTeamCount}
+        playMode={playMode}
+        effectivePlayMode={effectivePlayMode}
+        onPlayModeChange={setPlayMode}
       />
       <ThresholdStrip
         streak={selected.streak}
         targetIdx={targetIdx}
         onTargetChange={setTargetIdx}
+      />
+      <AITakeDrawer
+        competition={selected}
+        cardsBySlug={cardsBySlug}
+        target={target}
+        rewardLabel={
+          selected.streak?.thresholds[targetIdx]?.reward ??
+          fallbackReward(target)
+        }
       />
       <TeamsRow
         competition={selected}
@@ -448,6 +474,19 @@ function WorkspaceMain({
       />
     </>
   );
+}
+
+const FALLBACK_REWARD_BY_THRESHOLD: Record<number, string> = {
+  280: "$2",
+  320: "$6",
+  360: "$15",
+  400: "$50",
+  440: "$200",
+  480: "$1,000",
+};
+
+function fallbackReward(target: number): string {
+  return FALLBACK_REWARD_BY_THRESHOLD[target] ?? `${target} pts`;
 }
 
 function SaveIndicator({
