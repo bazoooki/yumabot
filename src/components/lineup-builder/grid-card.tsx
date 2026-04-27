@@ -5,7 +5,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { formatKickoffTime, getKickoffUrgency } from "@/lib/utils";
 import { type SorareCard, type CardStrategyMetrics, type StrategyTag, type PlayerIntel } from "@/lib/types";
-import { STRATEGY_TAG_STYLES, POSITION_SHORT } from "@/lib/ui-config";
+import { STRATEGY_TAG_STYLES, POSITION_SHORT, getGradeStyle } from "@/lib/ui-config";
 import type { PlayerForm } from "@/lib/hooks";
 import { getEditionInfo } from "@/lib/ai-lineup";
 
@@ -124,6 +124,14 @@ export const GridCard = memo(function GridCard({
           )}>
             {avgScore > 0 ? Math.round(avgScore) : "—"}
           </span>
+          {playerIntel?.projectionGrade && (() => {
+            const gs = getGradeStyle(playerIntel.projectionGrade);
+            return gs ? (
+              <span className={cn("text-[9px] font-bold px-1 py-0.5 rounded", gs.bg, "text-white")}>
+                {playerIntel.projectionGrade}
+              </span>
+            ) : null;
+          })()}
           {playerForm && (
             <span className={cn(
               "text-[9px] font-bold",

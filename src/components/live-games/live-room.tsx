@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Radio, Wifi, Users, Trophy, ExternalLink } from "lucide-react";
+import { Radio, Wifi, Users, Trophy, ExternalLink, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useMultiGameStream } from "@/lib/hooks/use-multi-game-stream";
 import { EventsFeed } from "./events-feed";
@@ -41,6 +41,7 @@ function isRecentlyFinished(game: FixtureGame): boolean {
 export function LiveRoom({ cards, userSlug }: Props) {
   const [mobileTab, setMobileTab] = useState<"lineups" | "feed" | "live">("feed");
   const [managers, setManagers] = useState<{ slug: string }[]>([]);
+  const [minPoints, setMinPoints] = useState(1.5);
 
   // Fetch live fixture
   const { data: fixture } = useQuery({
@@ -88,6 +89,7 @@ export function LiveRoom({ cards, userSlug }: Props) {
   const { games, events, isLoading, connectedCount } = useMultiGameStream({
     gameIds: allLiveGameIds,
     ownedPlayerSlugs,
+    minPointsThreshold: minPoints,
   });
 
   // Once we have game rosters, find which games actually have owned players
@@ -326,6 +328,23 @@ export function LiveRoom({ cards, userSlug }: Props) {
             <span className="text-[9px] text-zinc-600">
               {displayGames.length} game{displayGames.length !== 1 ? "s" : ""} tracked
             </span>
+            <div className="ml-auto flex items-center gap-1">
+              <SlidersHorizontal className="w-3 h-3 text-zinc-600" />
+              {[0.5, 1, 1.5].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setMinPoints(v)}
+                  className={cn(
+                    "text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors",
+                    minPoints === v
+                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                      : "text-zinc-600 hover:text-zinc-400",
+                  )}
+                >
+                  {v}+
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
             <EventsFeed events={events} variant={8} games={games} multiGame />

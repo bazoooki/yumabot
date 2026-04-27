@@ -48,8 +48,12 @@ export interface MemberLoadState {
   cardCount?: number;
 }
 
-async function fetchMemberCards(slug: string): Promise<MemberSummary> {
-  const res = await fetch(`/api/clan/cards?slugs=${slug}`);
+async function fetchMemberCards(
+  slug: string,
+  forceRefresh = false,
+): Promise<MemberSummary> {
+  const qs = forceRefresh ? `slugs=${slug}&refresh=true` : `slugs=${slug}`;
+  const res = await fetch(`/api/clan/cards?${qs}`);
   if (!res.ok) throw new Error(`Failed to fetch ${slug}`);
   const data = await res.json();
   return data[slug] as MemberSummary;
@@ -70,7 +74,7 @@ export function useClanPortfolios(userSlug: string): {
   const summaryRef = useRef<Record<string, MemberSummary>>({});
   const loadingRef = useRef(false);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (forceRefresh = false) => {
     if (loadingRef.current) return;
     loadingRef.current = true;
 
@@ -84,7 +88,7 @@ export function useClanPortfolios(userSlug: string): {
     // Fetch all members in parallel
     const promises = CLAN_MEMBERS.map(async (m) => {
       try {
-        const summary = await fetchMemberCards(m.slug);
+        const summary = await fetchMemberCards(m.slug, forceRefresh);
         summaryRef.current[m.slug] = summary;
         setMemberStates((prev) =>
           prev.map((s) =>
@@ -142,7 +146,9 @@ export function useClanPortfolios(userSlug: string): {
   }, [userSlug]);
 
   useEffect(() => {
-    loadAll();
+    // Auto-load on mount reads from cache only (no Sorare refetch).
+    // Users trigger a real refresh via the button, which calls refresh(true).
+    loadAll(false);
   }, [loadAll]);
 
   const isLoading = memberStates.some((s) => s.status === "loading" || s.status === "pending");
@@ -152,6 +158,6 @@ export function useClanPortfolios(userSlug: string): {
     isLoading,
     error,
     memberStates,
-    refresh: loadAll,
+    refresh: () => loadAll(true),
   };
 }

@@ -50,8 +50,12 @@ interface ScrapeEvent {
   gameWeek?: number;
   fixtureSlug?: string;
   totalLeaderboards?: number;
+  inSeasonCount?: number;
   toFetch?: number;
   skipping?: number;
+  mode?: string;
+  workers?: number;
+  worker?: number;
   leaderboard?: string;
   displayName?: string;
   current?: number;
@@ -64,6 +68,9 @@ interface ScrapeEvent {
   fetched?: number;
   skipped?: number;
   error?: string;
+  found?: boolean;
+  step?: string;
+  ms?: number;
 }
 
 async function fetchGWStatus(): Promise<{ gameWeeks: GWStatus[] }> {
@@ -84,7 +91,11 @@ function GWCard({
   isScraping,
 }: {
   gw: GWStatus;
-  onRescrape: (fixture: string) => void;
+  onRescrape: (
+    fixture: string,
+    gameWeek?: number,
+    opts?: { full?: boolean },
+  ) => void;
   isScraping: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -134,11 +145,13 @@ function GWCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onRescrape(gw.fixtureSlug);
+              onRescrape(gw.fixtureSlug, gw.gameWeek, {
+                full: e.shiftKey,
+              });
             }}
             disabled={isScraping}
             className="p-1 hover:bg-zinc-700 rounded transition-colors disabled:opacity-50"
-            title="Re-scrape this GW"
+            title="Re-scrape failed leaderboards only · shift-click for full refetch"
           >
             <RefreshCw className="w-3 h-3 text-zinc-500" />
           </button>
@@ -254,8 +267,29 @@ export function AdminDashboard() {
     void startScrape(`fixture=${fixtureSlug}`);
   };
 
-  const handleRescrape = (fixtureSlug: string) => {
-    void startScrape(`fixture=${fixtureSlug}&force=true`);
+  const handleRescrape = (
+    fixtureSlug: string,
+    gameWeek?: number,
+    opts?: { full?: boolean },
+  ) => {
+    const label = gameWeek != null ? `GW ${gameWeek}` : fixtureSlug;
+    if (opts?.full) {
+      if (
+        !window.confirm(
+          `FULL refetch ${label}? This refetches every leaderboard regardless of freshness. Normal rescrape only picks up stale/failed rows.`,
+        )
+      )
+        return;
+      void startScrape(`fixture=${fixtureSlug}&force=true`);
+    } else {
+      if (
+        !window.confirm(
+          `Rescrape ${label}? Stale and failed leaderboards will be refetched; fresh ones are skipped. Shift-click for full refetch.`,
+        )
+      )
+        return;
+      void startScrape(`fixture=${fixtureSlug}`);
+    }
   };
 
   // Progress from log
@@ -294,21 +328,32 @@ export function AdminDashboard() {
           {fixtures.map((f) => (
             <button
               key={f.slug}
-              onClick={() => !f.scraped && handleScrapeFixture(f.slug)}
-              disabled={isScraping || f.scraped}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+              onClick={(e) =>
                 f.scraped
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default"
+                  ? handleRescrape(f.slug, f.gameWeek, { full: e.shiftKey })
+                  : handleScrapeFixture(f.slug)
+              }
+              disabled={isScraping}
+              className={cn(
+                "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                f.scraped
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
                   : f.aasmState === "playing"
                     ? "bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20"
                     : "bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700",
-                isScraping && !f.scraped && "opacity-50",
+                isScraping && "opacity-50",
               )}
-              title={`${f.slug} (${f.aasmState})`}
+              title={
+                f.scraped
+                  ? `Re-fetch failed LBs · shift-click for full refetch (${f.slug})`
+                  : `${f.slug} (${f.aasmState})`
+              }
             >
               {f.scraped ? (
-                <CheckCircle2 className="w-3 h-3" />
+                <>
+                  <CheckCircle2 className="w-3 h-3 group-hover:hidden" />
+                  <RefreshCw className="w-3 h-3 hidden group-hover:block" />
+                </>
               ) : f.aasmState === "playing" ? (
                 <Circle className="w-3 h-3 fill-amber-400" />
               ) : (
@@ -381,17 +426,25 @@ export function AdminDashboard() {
               >
                 {event.type === "status" && event.message}
                 {event.type === "discovered" &&
-                  `Found GW ${event.gameWeek} (${event.fixtureSlug}) — ${event.totalLeaderboards} Limited LBs`}
+                  `Found GW ${event.gameWeek} (${event.fixtureSlug}) — ${event.totalLeaderboards} Limited LBs (${event.inSeasonCount ?? 0} in-season)`}
+                {event.type === "streak" &&
+                  `${event.worker ? `[W${event.worker}]` : "  "} streak ${event.found ? "✓" : "∅"} ${event.leaderboard} — ${event.displayName}`}
                 {event.type === "plan" &&
-                  `Plan: ${event.toFetch} to fetch, ${event.skipping} skipping`}
+                  `Plan [${event.mode ?? "default"}${event.workers ? ` · ${event.workers}×` : ""}]: ${event.toFetch} to fetch, ${event.skipping} skipping`}
                 {event.type === "fetching" &&
-                  `[${event.current}/${event.total}] Fetching ${event.leaderboard}...`}
+                  `${event.worker ? `[W${event.worker}] ` : ""}[${event.current}/${event.total}] Fetching ${event.leaderboard}...`}
                 {event.type === "page" &&
-                  `  page ${event.page}/${event.totalPages} (${event.rankingsSoFar} so far)`}
+                  `${event.worker ? `[W${event.worker}] ` : "  "}page ${event.page}/${event.totalPages} (${event.rankingsSoFar} so far)`}
                 {event.type === "page_error" &&
-                  `  ERROR page ${event.page}: ${event.error}`}
+                  `${event.worker ? `[W${event.worker}] ` : "  "}ERROR page ${event.page}: ${event.error}`}
                 {event.type === "stored" &&
-                  `✓ ${event.leaderboard} — ${event.rankings} rankings (${event.totalEntries} total entries)`}
+                  (event.rankings === 0
+                    ? `${event.worker ? `[W${event.worker}] ` : ""}⚠ ${event.leaderboard} — 0 rankings (0 total entries) — Sorare returned empty`
+                    : `${event.worker ? `[W${event.worker}] ` : ""}✓ ${event.leaderboard} — ${event.rankings} rankings (${event.totalEntries} total entries)`)}
+                {event.type === "compute" &&
+                  `  compute[${event.step}]${
+                    event.ms != null ? ` (${event.ms}ms)` : ""
+                  }${event.error ? ` — ERR ${event.error}` : ""}`}
                 {event.type === "done" &&
                   `DONE: GW ${event.gameWeek} — ${event.fetched} fetched, ${event.skipped} skipped`}
                 {event.type === "error" && `ERROR: ${event.message}`}

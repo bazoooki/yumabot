@@ -14,11 +14,13 @@ async function fetchPlayerIntelBatch(
   const data = await res.json();
   const result: Record<string, PlayerIntel> = {};
   for (const [slug, info] of Object.entries(data.players ?? {})) {
-    const d = info as { starterProbability: number | null; fieldStatus: string | null; reliability: string | null };
+    const d = info as { starterProbability: number | null; fieldStatus: string | null; reliability: string | null; projectionGrade: string | null; projectedScore: number | null };
     result[slug] = {
       starterProbability: d.starterProbability != null ? d.starterProbability * 100 : null,
       fieldStatus: d.fieldStatus,
       reliability: d.reliability,
+      projectionGrade: d.projectionGrade ?? null,
+      projectedScore: d.projectedScore ?? null,
     };
   }
   return result;

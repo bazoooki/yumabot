@@ -12,6 +12,10 @@ export interface GWStatusEntry {
 
 export async function GET() {
   try {
+    // NOTE: explicitly omit `rankingsJson` from the select — it's a large
+    // JSON blob and Prisma's napi binding has been known to throw
+    // "Failed to convert rust String into napi string" on rows with
+    // certain payloads. The admin listing only needs metadata + counts.
     const rows = await prisma.leaderboardResult.findMany({
       select: {
         gameWeek: true,
@@ -22,7 +26,6 @@ export async function GET() {
         division: true,
         totalEntries: true,
         fetchedAt: true,
-        rankingsJson: true,
       },
       orderBy: { gameWeek: "desc" },
     });
@@ -49,14 +52,15 @@ export async function GET() {
         fixtureSlug: row.fixtureSlug,
         leaderboards: [],
       };
-      const rankingsArr: unknown[] = JSON.parse(row.rankingsJson);
       existing.leaderboards.push({
         slug: row.leaderboardSlug,
         name: row.leaderboardName,
         leagueName: row.leagueName,
         division: row.division,
         totalEntries: row.totalEntries,
-        rankingsCount: rankingsArr.length,
+        // Approximation: the pagination stops at totalEntries or 1000 nodes,
+        // whichever is smaller — good enough for the admin overview.
+        rankingsCount: row.totalEntries,
         fetchedAt: row.fetchedAt,
       });
       byGW.set(row.gameWeek, existing);
@@ -87,7 +91,7 @@ export async function GET() {
   } catch (error) {
     console.error("[admin] Error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch GW status" },
+      { error: "Failed to fetch GW status", detail: String(error).slice(0, 200) },
       { status: 500 },
     );
   }

@@ -7,7 +7,7 @@ interface ResultsStore {
   leaderboards: LeaderboardSummary[];
   achievements: Achievement[];
   availableGameWeeks: number[];
-  activeSection: "podiums" | "achievements" | "clan";
+  activeSection: "podiums" | "achievements" | "clan" | "earnings";
   isLoadingFetch: boolean;
 
   setResults(gw: number, fixture: string, lbs: LeaderboardSummary[]): void;

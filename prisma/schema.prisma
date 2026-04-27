@@ -16,79 +16,6 @@ model CardCache {
   fetchedAt DateTime @default(now())
 }
 
-model CardStateEvent {
-  id            Int      @id @default(autoincrement())
-  cardSlug      String
-  playerSlug    String
-  playerName    String
-  rarity        String
-  onSale        Boolean
-  inLineup      Boolean
-  ownerSlug     String?
-  lineupDetails String?
-  receivedAt    DateTime @default(now())
-
-  @@index([cardSlug, receivedAt])
-  @@index([playerSlug, receivedAt])
-  @@index([receivedAt])
-}
-
-model MarketAlert {
-  id           Int      @id @default(autoincrement())
-  ruleType     String
-  severity     String
-  playerSlug   String?
-  playerName   String?
-  title        String
-  description  String
-  metadata     String   @default("{}")
-  acknowledged Boolean  @default(false)
-  createdAt    DateTime @default(now())
-
-  @@index([createdAt])
-  @@index([playerSlug, createdAt])
-}
-
-model MarketOffer {
-  id          Int      @id @default(autoincrement())
-  offerId     String   @unique
-  playerSlug  String
-  playerName  String
-  position    String?
-  rarity      String
-  priceWei    String
-  priceEth    Float
-  buyerSlug   String?
-  sellerSlug  String?
-  clubName    String?
-  cardSlug    String?
-  offerType   String?
-  offerStatus String?
-  dealStatus  String?
-  receivedAt  DateTime @default(now())
-
-  @@index([buyerSlug, receivedAt])
-  @@index([playerSlug, receivedAt])
-  @@index([receivedAt])
-}
-
-model OfferLifecycleEvent {
-  id               Int      @id @default(autoincrement())
-  offerId          String
-  playerSlug       String
-  playerName       String
-  status           String
-  priceEth         Float
-  previousPriceEth Float?
-  sellerSlug       String?
-  cardSlug         String?
-  receivedAt       DateTime @default(now())
-
-  @@index([offerId])
-  @@index([playerSlug, receivedAt])
-  @@index([receivedAt])
-}
-
 model SavedLineup {
   id        Int      @id @default(autoincrement())
   name      String   @default("Default")
@@ -96,6 +23,20 @@ model SavedLineup {
   slots     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model InSeasonDraft {
+  id              Int      @id @default(autoincrement())
+  userSlug        String
+  forUserSlug     String
+  competitionSlug String
+  fixtureSlug     String
+  payload         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userSlug, forUserSlug, competitionSlug, fixtureSlug])
+  @@index([userSlug, fixtureSlug])
 }
 
 model Settings {

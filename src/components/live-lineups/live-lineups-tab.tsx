@@ -17,17 +17,40 @@ interface CompetitionsResponse {
   competitions: InSeasonCompetition[];
 }
 
-async function fetchLiveLineups(
+interface PastFixture {
+  slug: string;
+  gameWeek: number;
+  aasmState: string;
+  endDate: string;
+  scraped: boolean;
+}
+
+async function fetchLineups(
   userSlug: string,
+  fixtureSlug: string | null,
 ): Promise<CompetitionsResponse> {
-  const res = await fetch(
-    `/api/in-season/competitions?userSlug=${encodeURIComponent(userSlug)}&type=LIVE&seasonality=all`,
-  );
+  const params = new URLSearchParams({
+    userSlug,
+    seasonality: "all",
+  });
+  if (fixtureSlug) {
+    params.set("fixtureSlug", fixtureSlug);
+  } else {
+    params.set("type", "LIVE");
+  }
+  const res = await fetch(`/api/in-season/competitions?${params}`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || "Failed to fetch live lineups");
+    throw new Error(data.error || "Failed to fetch lineups");
   }
   return res.json();
+}
+
+async function fetchPastFixtures(): Promise<PastFixture[]> {
+  const res = await fetch("/api/admin/fixtures?count=20");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.fixtures ?? []) as PastFixture[];
 }
 
 export function LiveLineupsTab({
@@ -38,16 +61,29 @@ export function LiveLineupsTab({
   userSlug: string;
 }) {
   const [variant, setVariant] = useState<LineupCardVariant>("compact");
+  // null = live (default). Otherwise a past fixture slug.
+  const [selectedFixtureSlug, setSelectedFixtureSlug] = useState<string | null>(
+    null,
+  );
+
+  const { data: pastFixtures } = useQuery({
+    queryKey: ["past-fixtures"],
+    queryFn: fetchPastFixtures,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isLive = selectedFixtureSlug === null;
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["in-season-competitions", userSlug, "LIVE"],
-    queryFn: () => fetchLiveLineups(userSlug),
-    staleTime: 60 * 1000,
-    refetchInterval: 60 * 1000,
+    queryKey: ["in-season-competitions", userSlug, selectedFixtureSlug ?? "LIVE"],
+    queryFn: () => fetchLineups(userSlug, selectedFixtureSlug),
+    staleTime: isLive ? 60 * 1000 : 5 * 60 * 1000,
+    refetchInterval: isLive ? 60 * 1000 : false,
     retry: 1,
   });
 
-  // Flatten all competitions into (competition, teamIndex) tuples for filled teams
+  // Flatten all competitions into (competition, teamIndex) tuples for filled teams,
+  // then sort by: $ desc → essence desc → score desc.
   const lineups = useMemo(() => {
     if (!data?.competitions) return [];
     const result: { competition: InSeasonCompetition; teamIndex: number }[] = [];
@@ -59,32 +95,70 @@ export function LiveLineupsTab({
         }
       }
     }
+    result.sort((a, b) => {
+      const ta = a.competition.teams[a.teamIndex];
+      const tb = b.competition.teams[b.teamIndex];
+      if (tb.rewardUsdCents !== ta.rewardUsdCents) {
+        return tb.rewardUsdCents - ta.rewardUsdCents;
+      }
+      const ea = ta.rewardEssence.reduce((s, e) => s + e.quantity, 0);
+      const eb = tb.rewardEssence.reduce((s, e) => s + e.quantity, 0);
+      if (eb !== ea) return eb - ea;
+      return (tb.totalScore ?? 0) - (ta.totalScore ?? 0);
+    });
     return result;
   }, [data]);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Header bar */}
-      <div className="border-b border-zinc-800 px-3 md:px-6 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2 py-2">
-          <span className="text-xs font-medium text-zinc-300">
-            Live Lineups
+      <div className="border-b border-zinc-800 px-3 md:px-6 flex items-center justify-between shrink-0 gap-3">
+        <div className="flex items-center gap-2 py-2 min-w-0">
+          <span className="text-xs font-medium text-zinc-300 shrink-0">
+            {isLive ? "Live Lineups" : "Lineups"}
           </span>
-          {data?.gameWeek && (
-            <span className="text-xs text-zinc-600">GW{data.gameWeek}</span>
-          )}
+
+          {/* GW selector pills */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+            <button
+              onClick={() => setSelectedFixtureSlug(null)}
+              className={cn(
+                "px-2 py-0.5 text-[10px] font-medium rounded-full transition-colors shrink-0 border",
+                isLive
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                  : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300 border-transparent",
+              )}
+            >
+              LIVE
+            </button>
+            {(pastFixtures ?? []).map((f) => (
+              <button
+                key={f.slug}
+                onClick={() => setSelectedFixtureSlug(f.slug)}
+                className={cn(
+                  "px-2 py-0.5 text-[10px] font-medium rounded-full transition-colors shrink-0 border",
+                  selectedFixtureSlug === f.slug
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                    : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300 border-transparent",
+                )}
+              >
+                GW{f.gameWeek}
+              </button>
+            ))}
+          </div>
+
           {isLoading && (
-            <span className="w-3.5 h-3.5 rounded-full bg-zinc-800 animate-pulse" />
+            <span className="w-3.5 h-3.5 rounded-full bg-zinc-800 animate-pulse shrink-0" />
           )}
           {lineups.length > 0 && (
-            <span className="text-[10px] text-zinc-600">
+            <span className="text-[10px] text-zinc-600 shrink-0 hidden md:inline">
               {lineups.length} lineup{lineups.length !== 1 ? "s" : ""}
             </span>
           )}
         </div>
 
         {/* Variant toggle */}
-        <div className="flex items-center gap-0.5 bg-zinc-800/50 rounded-md p-0.5">
+        <div className="flex items-center gap-0.5 bg-zinc-800/50 rounded-md p-0.5 shrink-0">
           <button
             onClick={() => setVariant("default")}
             className={cn(
@@ -128,7 +202,9 @@ export function LiveLineupsTab({
           <div className="text-center space-y-3">
             <Trophy className="w-8 h-8 text-zinc-600 mx-auto" />
             <p className="text-sm text-zinc-500">
-              No live lineups this gameweek
+              {isLive
+                ? "No live lineups this gameweek"
+                : `No lineups for GW${data?.gameWeek ?? ""}`}
             </p>
           </div>
         </div>

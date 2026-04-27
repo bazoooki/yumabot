@@ -32,6 +32,8 @@ export async function GET(request: Request) {
           upcomingGames: {
             playerGameScore: {
               scoreStatus: string;
+              projectedScore: number | null;
+              projection: { grade: string } | null;
               anyPlayerGameStats: {
                 fieldStatus: string;
                 footballPlayingStatusOdds: {
@@ -52,25 +54,30 @@ export async function GET(request: Request) {
           { slug: s }
         );
         const game = result?.anyPlayer?.activeClub?.upcomingGames?.[0];
-        const odds = game?.playerGameScore?.anyPlayerGameStats?.footballPlayingStatusOdds;
+        const pgs = game?.playerGameScore;
+        const odds = pgs?.anyPlayerGameStats?.footballPlayingStatusOdds;
         const starterProbability = odds
           ? odds.starterOddsBasisPoints / 10000
           : null;
-        const stats = game?.playerGameScore?.anyPlayerGameStats;
+        const stats = pgs?.anyPlayerGameStats;
         const fieldStatus = stats?.fieldStatus ?? null;
         const reliability = odds?.reliability ?? null;
+        const projectionGrade = pgs?.projection?.grade ?? null;
+        const projectedScore = pgs?.projectedScore ?? null;
 
-        return { slug: s, starterProbability, fieldStatus, reliability };
+        return { slug: s, starterProbability, fieldStatus, reliability, projectionGrade, projectedScore };
       })
     );
 
-    const players: Record<string, { starterProbability: number | null; fieldStatus: string | null; reliability: string | null }> = {};
+    const players: Record<string, { starterProbability: number | null; fieldStatus: string | null; reliability: string | null; projectionGrade: string | null; projectedScore: number | null }> = {};
     for (const r of results) {
       if (r.status === "fulfilled") {
         players[r.value.slug] = {
           starterProbability: r.value.starterProbability,
           fieldStatus: r.value.fieldStatus,
           reliability: r.value.reliability,
+          projectionGrade: r.value.projectionGrade,
+          projectedScore: r.value.projectedScore,
         };
       }
     }

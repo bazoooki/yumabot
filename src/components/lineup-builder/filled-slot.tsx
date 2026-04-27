@@ -7,6 +7,7 @@ import { cn, formatKickoffTime, getKickoffUrgency } from "@/lib/utils";
 import { useLineupStore } from "@/lib/lineup-store";
 import { getEditionInfo } from "@/lib/ai-lineup";
 import type { PlayerIntel } from "@/lib/types";
+import { getGradeStyle } from "@/lib/ui-config";
 import { PlayerModal } from "./player-modal";
 
 /* ─── Filled card on pitch ─── */
@@ -152,22 +153,32 @@ export function FilledSlot({
 
         {/* ── Bottom gradient with player info ── */}
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent pt-12 pb-2 px-2.5 z-10">
-          {/* Score + captain multiplier */}
+          {/* Score + grade + captain multiplier */}
           <div className="flex items-center justify-between mb-1">
-            <span
-              className={cn(
-                "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                isUnavailable
-                  ? "bg-red-500/20 text-red-400"
-                  : expectedScore >= 60
-                    ? "bg-green-500/25 text-green-400"
-                    : expectedScore >= 40
-                      ? "bg-yellow-500/25 text-yellow-400"
-                      : "bg-white/10 text-zinc-400",
-              )}
-            >
-              {isUnavailable ? "0" : `~${Math.round(expectedScore)}`}
-            </span>
+            <div className="flex items-center gap-1">
+              <span
+                className={cn(
+                  "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                  isUnavailable
+                    ? "bg-red-500/20 text-red-400"
+                    : expectedScore >= 60
+                      ? "bg-green-500/25 text-green-400"
+                      : expectedScore >= 40
+                        ? "bg-yellow-500/25 text-yellow-400"
+                        : "bg-white/10 text-zinc-400",
+                )}
+              >
+                {isUnavailable ? "0" : `~${Math.round(expectedScore)}`}
+              </span>
+              {intel?.projectionGrade && (() => {
+                const gs = getGradeStyle(intel.projectionGrade);
+                return gs ? (
+                  <span className={cn("text-[9px] font-bold px-1 py-0.5 rounded text-white", gs.bg)}>
+                    {intel.projectionGrade}
+                  </span>
+                ) : null;
+              })()}
+            </div>
             {isCaptain && (
               <span className="text-[9px] font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
                 C x1.5

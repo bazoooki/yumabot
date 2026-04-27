@@ -275,20 +275,13 @@ export const useMarketStore = create<MarketState>((set) => ({
   setFilters: (partial) =>
     set((s) => ({ filters: { ...s.filters, ...partial } })),
 
-  acknowledgeAlert: (id) => {
-    fetch("/api/market/alerts", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    }).catch(console.error);
-
+  acknowledgeAlert: (id) =>
     set((s) => ({
       alerts: s.alerts.map((a) =>
         a.id === id ? { ...a, acknowledged: true } : a
       ),
       unacknowledgedCount: Math.max(0, s.unacknowledgedCount - 1),
-    }));
-  },
+    })),
 
   toggleSound: () => set((s) => ({ soundEnabled: !s.soundEnabled })),
 

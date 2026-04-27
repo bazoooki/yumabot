@@ -18,6 +18,7 @@ export interface UpcomingGame {
 export interface SorarePlayer {
   slug: string;
   displayName: string;
+  avatarPictureUrl?: string | null;
   cardPositions: Position[];
   age: number;
   averageScore: number | null;
@@ -59,6 +60,7 @@ export interface SorareCard {
   cardEditionName: string | null;
   power: string;
   eligibleUpcomingLeagueTracks?: LeagueTrackEligibility[];
+  rawRecentSo5?: number[];
   anyPlayer: SorarePlayer | null;
 }
 
@@ -272,6 +274,8 @@ export interface PlayerIntel {
   starterProbability: number | null;
   fieldStatus: string | null;
   reliability: string | null;
+  projectionGrade: string | null;
+  projectedScore: number | null;
 }
 
 export interface LivePlayerScore {
@@ -321,6 +325,12 @@ export interface InSeasonTeam {
   rewardMultiplier: number;
   canEdit: boolean;
   ranking: number | null;
+  /** Projected (pre-close) or actual (post-close) USD cents earned by this team */
+  rewardUsdCents: number;
+  /** Total essence (card shards) by rarity */
+  rewardEssence: { rarity: string; quantity: number }[];
+  /** true iff rewards reflect actual post-close values (with revealed cards) */
+  rewardIsActual: boolean;
 }
 
 export interface InSeasonSlot {
@@ -335,6 +345,10 @@ export interface InSeasonSlot {
   isCaptain: boolean;
   score: number | null;
   scoreStatus: string | null;
+  projectedScore: number | null;
+  projectionGrade: string | null;
+  /** Starter probability 0–100, used in the compact mini-grid. */
+  startProbability?: number | null;
   /** Game date (ISO string) — for showing kickoff time on scheduled players */
   gameDate: string | null;
   /** Game status */
@@ -343,6 +357,10 @@ export interface InSeasonSlot {
   gameHomeCode: string | null;
   /** Away team code */
   gameAwayCode: string | null;
+  /** Home team crest image URL */
+  gameHomeCrestUrl: string | null;
+  /** Away team crest image URL */
+  gameAwayCrestUrl: string | null;
 }
 
 export interface InSeasonStreak {

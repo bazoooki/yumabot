@@ -44,6 +44,8 @@ function parseSlot(appearance: any): InSeasonSlot {
     gameStatus: game?.statusTyped ?? null,
     gameHomeCode: game?.homeTeam?.code ?? null,
     gameAwayCode: game?.awayTeam?.code ?? null,
+    gameHomeCrestUrl: game?.homeTeam?.pictureUrl ?? null,
+    gameAwayCrestUrl: game?.awayTeam?.pictureUrl ?? null,
   };
 }
 

@@ -33,39 +33,42 @@ export function validateInSeasonLineup(
     }
   }
 
-  // Check league restriction (skip for cross-league)
-  const crossLeagueKeywords = ["challenger", "contender", "european", "global"];
-  const isCrossLeague = crossLeagueKeywords.some((kw) =>
-    comp.leagueName.toLowerCase().includes(kw),
-  );
-  if (!isCrossLeague) {
-    for (const slot of filledSlots) {
-      const card = slot.card!;
-      const playerLeague = card.anyPlayer?.activeClub?.domesticLeague?.name;
-      if (playerLeague && playerLeague !== comp.leagueName) {
-        messages.push({
-          type: "error",
-          text: `${card.anyPlayer?.displayName ?? "Card"} plays in ${playerLeague}, need ${comp.leagueName}`,
-        });
-      }
+  // A card is eligible for this comp iff its `eligibleUpcomingLeagueTracks`
+  // contains a track to a leaderboard matching this comp's rarity + league.
+  // This replaces the old `domesticLeague === comp.leagueName` + `inSeasonEligible`
+  // pair — both were stale/misleading (loanees, dual-eligible cards).
+  const isEligibleForComp = (card: InSeasonLineupSlot["card"]): boolean => {
+    if (!card) return false;
+    const tracks = card.eligibleUpcomingLeagueTracks ?? [];
+    return tracks.some(
+      (t) =>
+        t.entrySo5Leaderboard.mainRarityType === comp.mainRarityType &&
+        t.entrySo5Leaderboard.so5League.displayName === comp.leagueName,
+    );
+  };
+
+  for (const slot of filledSlots) {
+    const card = slot.card!;
+    if (!isEligibleForComp(card)) {
+      messages.push({
+        type: "error",
+        text: `${card.anyPlayer?.displayName ?? "Card"} not eligible for ${comp.leagueName}`,
+      });
     }
   }
 
-  // Check in-season eligibility (min 4 out of 5)
-  const inSeasonCount = filledSlots.filter((s) => s.card!.inSeasonEligible).length;
+  // Min 4-of-5 rule is covered by the per-slot check above (each ineligible
+  // card becomes an error). Keep a soft count warning while the lineup is
+  // still being built.
+  const eligibleCount = filledSlots.filter((s) => isEligibleForComp(s.card)).length;
   const minRequired = 4;
-  if (filledSlots.length >= 5 && inSeasonCount < minRequired) {
-    messages.push({
-      type: "error",
-      text: `Only ${inSeasonCount}/${minRequired} in-season eligible cards (need at least ${minRequired})`,
-    });
-  } else if (inSeasonCount < minRequired && filledSlots.length < 5) {
+  if (filledSlots.length < 5 && eligibleCount < minRequired) {
     const remaining = 5 - filledSlots.length;
-    const needed = minRequired - inSeasonCount;
+    const needed = minRequired - eligibleCount;
     if (needed > remaining) {
       messages.push({
         type: "warning",
-        text: `${inSeasonCount} in-season cards so far — need at least ${minRequired} of 5`,
+        text: `${eligibleCount} eligible cards so far — need at least ${minRequired} of 5`,
       });
     }
   }

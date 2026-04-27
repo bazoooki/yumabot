@@ -7,7 +7,7 @@ import { cn, groupByDay } from "@/lib/utils";
 import { usePlayerIntel, usePlayerForm } from "@/lib/hooks";
 import { useLineupStore } from "@/lib/lineup-store";
 import { scoreCards, scoreCardsWithStrategy } from "@/lib/ai-lineup";
-import { LineupCard } from "./lineup-card";
+import { CardRow } from "./card-row";
 import { GridCard } from "./grid-card";
 import { StrategyPanel } from "./strategy-panel";
 import { CommandBar } from "@/components/command-bar/command-bar";
@@ -167,7 +167,7 @@ export function CardPicker({ cards }: CardPickerProps) {
     if (viewMode === "grid") {
       return <GridCard key={sc.card.slug} {...props} />;
     }
-    return <LineupCard key={sc.card.slug} {...props} />;
+    return <CardRow key={sc.card.slug} {...props} />;
   }
 
   return (

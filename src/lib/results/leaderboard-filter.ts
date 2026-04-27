@@ -10,7 +10,8 @@ const DIV2_MAX_KEYWORDS = [
 
 /**
  * Returns true if this leaderboard should be scraped.
- * Filters out Div 3+ for cross-league / secondary competitions.
+ * Caller is responsible for filtering arenas (via `isArena` from Sorare's schema).
+ * This function only handles Div 3+ cross-league / secondary competitions.
  */
 export function shouldScrapeLeaderboard(
   displayName: string,
@@ -19,7 +20,7 @@ export function shouldScrapeLeaderboard(
 ): boolean {
   if (division <= 2) return true;
 
-  const nameLower = `${displayName} ${leagueName}`.toLowerCase();
-  const isSecondary = DIV2_MAX_KEYWORDS.some((kw) => nameLower.includes(kw));
+  const combined = `${displayName} ${leagueName}`.toLowerCase();
+  const isSecondary = DIV2_MAX_KEYWORDS.some((kw) => combined.includes(kw));
   return !isSecondary;
 }

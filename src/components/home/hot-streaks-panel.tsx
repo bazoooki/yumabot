@@ -1,21 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import type {
-  InSeasonCompetition,
-  InSeasonTeam,
-  InSeasonStreak,
-  RarityType,
-} from "@/lib/types";
+import type { InSeasonCompetition, InSeasonTeam } from "@/lib/types";
 import {
   computeTeamClearance,
   type TeamClearance,
 } from "@/lib/in-season/clearance-odds";
-import type { MyStreaksResponse } from "@/app/api/in-season/my-streaks/route";
-import type { PlayedTracksResponse } from "@/app/api/in-season/played-tracks/route";
 import { LineupCard } from "@/components/lineup-card/lineup-card";
+import { AIVerdict } from "@/components/ai/ai-verdict";
+import {
+  useHotStreakEntries,
+  type HotStreakEntry,
+} from "./use-hot-streak-entries";
 import {
   Flame,
   ChevronRight,
@@ -24,42 +21,6 @@ import {
   Trophy,
   Sparkles,
 } from "lucide-react";
-
-// One row per (league, rarity). All divisions the user plays in that league+
-// rarity are merged into the same row (thresholds are the same across
-// divisions in the same league+rarity). Each "liveDivision" carries its own
-// live InSeasonCompetition with teams so we can render team-level detail on
-// expand.
-interface HotStreakEntry {
-  key: string; // `${leagueName}::${mainRarityType}` — stable across fixtures
-  leagueName: string;
-  mainRarityType: RarityType;
-  iconUrl: string | null;
-  streak: InSeasonStreak | null;
-  // Every division the user has a live lineup in, grouped into one entry.
-  liveDivisions: Array<{
-    division: number;
-    competition: InSeasonCompetition;
-    activeTeams: InSeasonTeam[];
-  }>;
-  hasLiveLineup: boolean;
-}
-
-async function fetchMyStreaks(): Promise<MyStreaksResponse | null> {
-  const res = await fetch(`/api/in-season/my-streaks`);
-  if (!res.ok) return null;
-  return (await res.json()) as MyStreaksResponse;
-}
-
-async function fetchPlayedTracks(
-  userSlug: string,
-): Promise<PlayedTracksResponse | null> {
-  const res = await fetch(
-    `/api/in-season/played-tracks?userSlug=${encodeURIComponent(userSlug)}&fixtures=6`,
-  );
-  if (!res.ok) return null;
-  return (await res.json()) as PlayedTracksResponse;
-}
 
 interface HotStreaksPanelProps {
   liveCompetitions: InSeasonCompetition[] | undefined;
@@ -76,138 +37,12 @@ export function HotStreaksPanel({
   userSlug,
   onNavigate,
 }: HotStreaksPanelProps) {
-  const { data: myStreaksData, isLoading: myStreaksLoading } = useQuery({
-    queryKey: ["in-season-my-streaks"],
-    queryFn: fetchMyStreaks,
-    staleTime: 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
+  const { entries, gameWeek, loading } = useHotStreakEntries({
+    liveCompetitions,
+    liveLoading,
+    liveGameWeek,
+    userSlug,
   });
-
-  const { data: playedTracksData, isLoading: playedLoading } = useQuery({
-    queryKey: ["in-season-played-tracks", userSlug],
-    queryFn: () => fetchPlayedTracks(userSlug),
-    staleTime: 10 * 60 * 1000,
-    enabled: Boolean(userSlug),
-  });
-
-  const entries: HotStreakEntry[] = useMemo(() => {
-    const inSeasonLive = (liveCompetitions ?? []).filter(
-      (c) => c.seasonality === "IN_SEASON",
-    );
-
-    // Authoritative set of in-season (leagueName, rarity) keys for the
-    // upcoming GW. Used to drop arena/leaderboard-only comps like "All Star",
-    // "Champion", "European Leagues" that can appear in LIVE or played-tracks
-    // but aren't real in-season tracks.
-    //
-    // Note: we key by `leagueName` (e.g. "Jupiler Pro League") — NOT
-    // `leagueSlug` — because Sorare's league slug is fixture-scoped
-    // (`football-21-apr-…-seasonal-jupiler` vs `football-24-apr-…-seasonal-jupiler`)
-    // so slugs from the UPCOMING and LIVE fixtures never match.
-    const upcomingInSeasonKeys = new Set<string>();
-    for (const meta of myStreaksData?.competitions ?? []) {
-      upcomingInSeasonKeys.add(`${meta.leagueName}::${meta.mainRarityType}`);
-    }
-    const isInSeasonKey = (leagueName: string, rarity: string): boolean => {
-      // If the upcoming fixture hasn't loaded yet, don't filter aggressively
-      // (fall back to trusting the LIVE seasonality field + played-tracks).
-      if (upcomingInSeasonKeys.size === 0) return true;
-      return upcomingInSeasonKeys.has(`${leagueName}::${rarity}`);
-    };
-
-    const out = new Map<string, HotStreakEntry>();
-    const seedEntry = (
-      leagueName: string,
-      rarity: RarityType,
-      iconUrl: string | null,
-    ): HotStreakEntry => {
-      const key = `${leagueName}::${rarity}`;
-      let entry = out.get(key);
-      if (!entry) {
-        entry = {
-          key,
-          leagueName,
-          mainRarityType: rarity,
-          iconUrl,
-          streak: null,
-          liveDivisions: [],
-          hasLiveLineup: false,
-        };
-        out.set(key, entry);
-      } else if (!entry.iconUrl && iconUrl) {
-        entry.iconUrl = iconUrl;
-      }
-      return entry;
-    };
-
-    // 1. LIVE is the primary source of truth — it carries streak + teams. Seed
-    //    every in-season live comp, regardless of whether the user has a
-    //    lineup in it. Some entries will be streak-only (no current teams).
-    for (const live of inSeasonLive) {
-      if (!isInSeasonKey(live.leagueName, live.mainRarityType)) continue;
-      const entry = seedEntry(
-        live.leagueName,
-        live.mainRarityType,
-        live.iconUrl ?? null,
-      );
-      if (!entry.streak && live.streak && live.streak.thresholds.length > 0) {
-        entry.streak = live.streak;
-      }
-      const activeTeams = live.teams.filter((t) =>
-        t.slots.some((s) => s.cardSlug),
-      );
-      if (activeTeams.length > 0) {
-        entry.liveDivisions.push({
-          division: live.division,
-          competition: live,
-          activeTeams,
-        });
-        entry.hasLiveLineup = true;
-      }
-    }
-
-    // 2. Played-tracks: add rows for leagues the user has played in the past
-    //    but isn't active in right now. Skip if already seeded from LIVE, and
-    //    drop arena/leaderboard-only comps that aren't real in-season tracks.
-    for (const t of playedTracksData?.tracks ?? []) {
-      if (!isInSeasonKey(t.leagueName, t.mainRarityType)) continue;
-      seedEntry(t.leagueName, t.mainRarityType as RarityType, null);
-    }
-
-    // 3. Upcoming metadata: purely enrichment — fill in icons for entries we
-    //    already have (skip entries we don't already have to avoid flooding
-    //    with every upcoming in-season leaderboard).
-    for (const meta of myStreaksData?.competitions ?? []) {
-      const key = `${meta.leagueName}::${meta.mainRarityType}`;
-      const entry = out.get(key);
-      if (!entry) continue;
-      if (!entry.iconUrl) entry.iconUrl = meta.iconUrl;
-    }
-
-    // Within each entry, keep divisions ordered low→high (top division first).
-    for (const entry of out.values()) {
-      entry.liveDivisions.sort((a, b) => a.division - b.division);
-    }
-
-    // Sort: entries with live lineups first, then with streak data, then name.
-    const result = Array.from(out.values());
-    result.sort((a, b) => {
-      if (a.hasLiveLineup !== b.hasLiveLineup)
-        return a.hasLiveLineup ? -1 : 1;
-      const aStreak = a.streak ? 1 : 0;
-      const bStreak = b.streak ? 1 : 0;
-      if (aStreak !== bStreak) return bStreak - aStreak;
-      const aLvl = a.streak?.currentLevel ?? 0;
-      const bLvl = b.streak?.currentLevel ?? 0;
-      if (aLvl !== bLvl) return bLvl - aLvl;
-      return a.leagueName.localeCompare(b.leagueName);
-    });
-
-    return result;
-  }, [myStreaksData, liveCompetitions, playedTracksData]);
-
-  const loading = liveLoading || myStreaksLoading || playedLoading;
-  const gameWeek = myStreaksData?.gameWeek ?? liveGameWeek;
 
   return (
     <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 md:p-5">
@@ -521,12 +356,6 @@ function ClearancePill({ probability }: { probability: number }) {
 
 // --- AI take ---
 
-interface StreakTakeResponse {
-  text?: string;
-  cached?: boolean;
-  error?: string;
-}
-
 function StreakAITake({
   entry,
   aggregateTeams,
@@ -566,57 +395,27 @@ function StreakAITake({
     [teamsPayload],
   );
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["streak-ai-take", entry.key, targetScore, payloadKey],
-    queryFn: async () => {
-      const res = await fetch("/api/ai/streak-take", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          competition: {
-            leagueName: entry.leagueName,
-            division: 0, // league-level; AI doesn't need a single division anymore
-            rarity: RARITY_LABEL[entry.mainRarityType] ?? entry.mainRarityType,
-          },
-          targetScore,
-          rewardLabel,
-          teams: teamsPayload,
-        }),
-      });
-      if (!res.ok) throw new Error("AI request failed");
-      return (await res.json()) as StreakTakeResponse;
-    },
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-    enabled: teamsPayload.length > 0,
-  });
+  const payload = useMemo(
+    () => ({
+      competition: {
+        leagueName: entry.leagueName,
+        division: 0,
+        rarity: RARITY_LABEL[entry.mainRarityType] ?? entry.mainRarityType,
+      },
+      targetScore,
+      rewardLabel,
+      teams: teamsPayload,
+    }),
+    [entry.leagueName, entry.mainRarityType, targetScore, rewardLabel, teamsPayload],
+  );
 
   return (
-    <div className="rounded-lg bg-gradient-to-br from-amber-500/5 to-pink-500/5 border border-amber-500/20 p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-          AI Take
-        </span>
-        {data?.cached && (
-          <span className="text-[9px] text-zinc-600">cached</span>
-        )}
-      </div>
-      {isLoading ? (
-        <div className="space-y-1.5">
-          <div className="h-3 rounded bg-zinc-800/60 animate-pulse" />
-          <div className="h-3 rounded bg-zinc-800/60 animate-pulse w-4/5" />
-          <div className="h-3 rounded bg-zinc-800/60 animate-pulse w-3/5" />
-        </div>
-      ) : isError ? (
-        <p className="text-[11px] text-zinc-500">
-          The commentator stepped out — try again in a sec.
-        </p>
-      ) : data?.text ? (
-        <p className="text-[12px] leading-relaxed text-zinc-200 whitespace-pre-line">
-          {data.text}
-        </p>
-      ) : null}
-    </div>
+    <AIVerdict
+      endpoint="/api/ai/streak-take"
+      payload={payload}
+      cacheKey={["streak-ai-take", entry.key, targetScore, payloadKey]}
+      enabled={teamsPayload.length > 0}
+      variant="amber"
+    />
   );
 }

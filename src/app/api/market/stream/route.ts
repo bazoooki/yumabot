@@ -1,11 +1,8 @@
 import { wsManager } from "@/lib/market/ws-manager";
-import { cleanupOldData } from "@/lib/market/anomaly-engine";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  // Clean up old data on connection start
-  cleanupOldData().catch(console.error);
 
   const url = new URL(request.url);
   const wantsAdvanced = url.searchParams.get("advanced") === "true";

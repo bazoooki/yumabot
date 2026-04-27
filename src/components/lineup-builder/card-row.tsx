@@ -4,13 +4,13 @@ import { memo, useState } from "react";
 import Image from "next/image";
 import { Info } from "lucide-react";
 import { cn, getKickoffUrgency, formatKickoffTime, formatKickoffDate } from "@/lib/utils";
-import { type SorareCard, type CardStrategyMetrics, type StrategyTag, type PlayerIntel } from "@/lib/types";
+import { type SorareCard, type CardStrategyMetrics, type PlayerIntel } from "@/lib/types";
 import { STRATEGY_TAG_STYLES, POSITION_SHORT } from "@/lib/ui-config";
 import type { PlayerForm } from "@/lib/hooks";
 import { getEditionInfo } from "@/lib/ai-lineup";
 import { PlayerModal } from "./player-modal";
 
-interface LineupCardProps {
+interface CardRowProps {
   card: SorareCard;
   strategy?: CardStrategyMetrics;
   starterProbability?: number | null;
@@ -20,7 +20,7 @@ interface LineupCardProps {
   onClick?: () => void;
 }
 
-export const LineupCard = memo(function LineupCard({
+export const CardRow = memo(function CardRow({
   card,
   strategy,
   starterProbability,
@@ -28,7 +28,7 @@ export const LineupCard = memo(function LineupCard({
   playerForm,
   disabled,
   onClick,
-}: LineupCardProps) {
+}: CardRowProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const player = card.anyPlayer;
   if (!player) return null;

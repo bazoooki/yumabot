@@ -434,29 +434,9 @@ export function useEligibleCards(cards: SorareCard[]): SorareCard[] {
   if (!comp) return [];
 
   return cards.filter((c) => {
-    // Must match rarity
-    if (c.rarityTyped !== comp.mainRarityType) return false;
-
-    // Must have a player
     if (!c.anyPlayer) return false;
-
-    // Must have an upcoming game
     if (!c.anyPlayer.activeClub?.upcomingGames?.length) return false;
-
-    // Don't show cards used in other teams of same competition
     if (usedCardSlugs.has(c.slug)) return false;
-
-    // League filter (skip for cross-league competitions)
-    // Cross-league comps typically have group names like "Challenger", "Contender", "European Leagues"
-    const crossLeagueKeywords = ["challenger", "contender", "european", "global"];
-    const isCrossLeague = crossLeagueKeywords.some((kw) =>
-      comp.leagueName.toLowerCase().includes(kw),
-    );
-    if (!isCrossLeague && comp.leagueName) {
-      const playerLeague = c.anyPlayer.activeClub?.domesticLeague?.name;
-      if (playerLeague && playerLeague !== comp.leagueName) return false;
-    }
-
-    return true;
+    return isEligibleForCompetition(c, comp);
   });
 }

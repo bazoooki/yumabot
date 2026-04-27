@@ -17,6 +17,7 @@ type PrevFieldMap = Map<string, string>;
 interface MultiGameStreamOptions {
   gameIds: string[];
   ownedPlayerSlugs: Set<string>;
+  minPointsThreshold?: number;
 }
 
 interface MultiGameStreamResult {
@@ -29,6 +30,7 @@ interface MultiGameStreamResult {
 export function useMultiGameStream({
   gameIds,
   ownedPlayerSlugs,
+  minPointsThreshold,
 }: MultiGameStreamOptions): MultiGameStreamResult {
   const [games, setGames] = useState<Map<string, GameDetail>>(new Map());
   const [allEvents, setAllEvents] = useState<FeedItem[]>([]);
@@ -40,6 +42,8 @@ export function useMultiGameStream({
   const fetchedRef = useRef<Set<string>>(new Set());
   const ownedRef = useRef(ownedPlayerSlugs);
   ownedRef.current = ownedPlayerSlugs;
+  const thresholdRef = useRef(minPointsThreshold);
+  thresholdRef.current = minPointsThreshold;
 
   const getGameLabel = useCallback((game: GameDetail) => {
     return `${game.homeTeam.code} vs ${game.awayTeam.code}`;
@@ -143,7 +147,7 @@ export function useMultiGameStream({
         detectSubs(gameId, gameData, gameLabel);
       } else {
         // Diff stats
-        const { events: statEvents, nextState } = diffGameStats(prevStats, gameData);
+        const { events: statEvents, nextState } = diffGameStats(prevStats, gameData, thresholdRef.current);
         prevStatsRef.current.set(gameId, nextState);
 
         // Detect subs

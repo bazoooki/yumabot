@@ -5,7 +5,6 @@ import { buildPortfolioIndex } from "@/lib/market/portfolio-utils";
 import type { SorareCard } from "@/lib/types";
 import type { OwnedPlayerInfo } from "@/lib/market/portfolio-utils";
 
-const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6 hours
 const STAGGER_MS = 500;
 
 const RARITY_WEIGHTS: Record<string, number> = {
@@ -63,10 +62,17 @@ interface MemberSummary {
   cards: SlimCard[];
 }
 
-async function fetchUserCards(slug: string): Promise<SorareCard[]> {
-  const cached = await prisma.cardCache.findUnique({ where: { userSlug: slug } });
-  if (cached && Date.now() - cached.fetchedAt.getTime() < CACHE_MAX_AGE_MS) {
-    return JSON.parse(cached.cardsJson) as SorareCard[];
+async function fetchUserCards(
+  slug: string,
+  forceRefresh = false,
+): Promise<SorareCard[]> {
+  if (!forceRefresh) {
+    const cached = await prisma.cardCache.findUnique({
+      where: { userSlug: slug },
+    });
+    if (cached) {
+      return JSON.parse(cached.cardsJson) as SorareCard[];
+    }
   }
 
   const cards = await fetchFromSorare(slug);
@@ -174,6 +180,7 @@ function slimCards(cards: SorareCard[]): SlimCard[] {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const slugsParam = searchParams.get("slugs");
+  const forceRefresh = searchParams.get("refresh") === "true";
 
   if (!slugsParam) {
     return NextResponse.json({ error: "Missing slugs parameter" }, { status: 400 });
@@ -190,7 +197,7 @@ export async function GET(request: Request) {
     for (let i = 0; i < slugs.length; i++) {
       const slug = slugs[i];
       try {
-        const cards = await fetchUserCards(slug);
+        const cards = await fetchUserCards(slug, forceRefresh);
         const summary = summarize(cards);
         summary.cards = slimCards(cards);
         result[slug] = summary;

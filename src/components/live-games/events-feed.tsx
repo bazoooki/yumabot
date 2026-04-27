@@ -21,6 +21,8 @@ function getEventBorder(ev: GameEvent, isNear: boolean): string {
     case "goal":
     case "goals":
     case "assist":
+    case "goal_assist":
+    case "penalty_won":
       return "border-l-green-500";
     case "own_goal":
     case "red_card":
@@ -62,7 +64,9 @@ function BatchedEventCard({
 
   const allAffected = [...relatedTriggers, ...affected];
   const totalDelta = [trigger, ...allAffected].reduce((sum, e) => sum + e.pointsDelta, 0);
-  const assistEvent = relatedTriggers.find((rt) => rt.stat === "assist");
+  const assistEvent = relatedTriggers.find(
+    (rt) => rt.stat === "assist" || rt.stat === "goal_assist",
+  );
 
   // ── Compact 2-row card for goals ──
   if (isGoal || isOwnGoal) {
@@ -157,9 +161,29 @@ function BatchedEventCard({
 
   // ── Standard batched card for red cards / other triggers ──
   const { icon: triggerIcon } = getStatLabel(trigger.stat);
-  const leftBorder = isRed ? "border-l-red-500" : "border-l-amber-500";
-  const accentColor = isRed ? "from-red-500/10 to-transparent" : "from-amber-500/10 to-transparent";
-  const textAccent = isRed ? "text-red-400" : "text-amber-400";
+  const isPositiveTrigger = trigger.category === "decisive";
+  const isNegativeTrigger = trigger.category === "negative";
+  const leftBorder = isRed
+    ? "border-l-red-500"
+    : isNegativeTrigger
+      ? "border-l-amber-500"
+      : isPositiveTrigger
+        ? "border-l-green-500"
+        : "border-l-amber-500";
+  const accentColor = isRed
+    ? "from-red-500/10 to-transparent"
+    : isNegativeTrigger
+      ? "from-amber-500/10 to-transparent"
+      : isPositiveTrigger
+        ? "from-green-500/10 to-transparent"
+        : "from-amber-500/10 to-transparent";
+  const textAccent = isRed
+    ? "text-red-400"
+    : isNegativeTrigger
+      ? "text-amber-400"
+      : isPositiveTrigger
+        ? "text-green-400"
+        : "text-amber-400";
 
   return (
     <div className={cn("border-b border-zinc-800/40 border-l-4", leftBorder)}>

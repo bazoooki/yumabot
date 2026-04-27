@@ -15,6 +15,7 @@ import type {
 } from "@/lib/types";
 import { LineupCard } from "@/components/lineup-card/lineup-card";
 import { HotStreaksPanel } from "@/components/home/hot-streaks-panel";
+import { AISuggestionsPanel } from "@/components/home/ai-suggestions-panel";
 import {
   Target, Clock, ChevronRight, TrendingUp, Tv, Trophy,
   BarChart3, AlertTriangle,
@@ -197,13 +198,21 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
           </button>
         </div>
 
-        {/* ── Section 3: My Hot Streaks ── */}
-        <div className="md:w-1/2">
+        {/* ── Section 3: My Hot Streaks + Next GW AI Suggestions ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
           <HotStreaksPanel
             liveCompetitions={lineupsData?.competitions}
             liveLoading={lineupsLoading}
             liveGameWeek={lineupsData?.gameWeek}
             userSlug={userSlug}
+            onNavigate={onNavigate}
+          />
+          <AISuggestionsPanel
+            liveCompetitions={lineupsData?.competitions}
+            liveLoading={lineupsLoading}
+            liveGameWeek={lineupsData?.gameWeek}
+            userSlug={userSlug}
+            cards={cards}
             onNavigate={onNavigate}
           />
         </div>

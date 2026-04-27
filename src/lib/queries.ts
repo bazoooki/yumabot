@@ -25,9 +25,11 @@ export const USER_CARDS_QUERY = gql`
               }
             }
           }
+          rawRecentSo5: rawSo5Scores(last: 5)
           anyPlayer {
             slug
             displayName
+            avatarPictureUrl
             cardPositions
             age
             averageScore(type: LAST_FIFTEEN_SO5_AVERAGE_SCORE)
@@ -366,9 +368,11 @@ const IN_SEASON_FIXTURE_BODY = `
                   statusTyped
                   homeTeam {
                     code
+                    pictureUrl
                   }
                   awayTeam {
                     code
+                    pictureUrl
                   }
                 }
               }

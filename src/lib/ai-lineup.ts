@@ -157,10 +157,30 @@ export function estimateTotalScore(
 
 // --- Level-Aware Strategy System ---
 
-const LEVEL_WEIGHTS: Record<
-  number,
-  { expectedScore: number; floor: number; ceiling: number; consistency: number; startProb: number }
+export interface StrategyWeights {
+  expectedScore: number;
+  floor: number;
+  ceiling: number;
+  consistency: number;
+  startProb: number;
+}
+
+/**
+ * Risk-profile overrides for the AI Suggestions panel. These deliberately
+ * diverge from LEVEL_WEIGHTS so the three suggested lineups land on visibly
+ * different card sets even at the same target threshold.
+ */
+export const RISK_PROFILE_WEIGHTS: Record<
+  "safe" | "balanced" | "ceiling",
+  StrategyWeights
 > = {
+  safe: { expectedScore: 0.05, floor: 0.30, ceiling: 0.00, consistency: 0.15, startProb: 0.50 },
+  // BALANCED uses LEVEL_WEIGHTS[level] at call time; sentinel kept for symmetry.
+  balanced: { expectedScore: 0.35, floor: 0.15, ceiling: 0.15, consistency: 0.15, startProb: 0.20 },
+  ceiling: { expectedScore: 0.30, floor: 0.05, ceiling: 0.50, consistency: 0.00, startProb: 0.15 },
+};
+
+const LEVEL_WEIGHTS: Record<number, StrategyWeights> = {
   1: { expectedScore: 0.30, floor: 0.35, ceiling: 0.05, consistency: 0.20, startProb: 0.10 },
   2: { expectedScore: 0.30, floor: 0.30, ceiling: 0.05, consistency: 0.20, startProb: 0.15 },
   3: { expectedScore: 0.35, floor: 0.15, ceiling: 0.15, consistency: 0.15, startProb: 0.20 },
@@ -217,8 +237,13 @@ export function computeStrategyMetrics(
   if (!hasGame) expectedScore = 0;
   if (isHome) expectedScore *= 1.05;
 
-  // Apply projection grade multiplier (A → +15%, D → −10%, etc.)
-  const gradeMult = projectionGrade ? (GRADE_MULTIPLIERS[projectionGrade.toUpperCase()] ?? 1) : 1;
+  // Apply projection grade multiplier (A → +15%, D → −10%, etc.). When no
+  // grade is available (intel missing), treat the card as slightly below C
+  // rather than neutral — otherwise unrated cards outrank real A/B-graded
+  // cards whose matchup intel happens to lower their score.
+  const gradeMult = projectionGrade
+    ? (GRADE_MULTIPLIERS[projectionGrade.toUpperCase()] ?? 1)
+    : 0.85;
   expectedScore *= gradeMult;
 
   const isDetailed = !!scoreHistory && scoreHistory.length >= 3;
@@ -250,7 +275,10 @@ export function computeStrategyMetrics(
     ? Math.max(0, Math.min(100, Math.round(100 - (stdDev / avgScore) * 100)))
     : 0;
 
-  const startProb = startProbability ?? (hasGame ? 0.75 : 0);
+  // Default to 0.5 (not 0.75) when intel is missing — a no-intel card should
+  // NOT be treated as a near-certain starter; otherwise it sails to the top
+  // of the sort over real graded players with known 60–80% start rates.
+  const startProb = startProbability ?? (hasGame ? 0.5 : 0);
 
   // Scale expected score and floor by start probability.
   // A 0% starter has ~0 expected value; a 10% starter keeps ~10%.
@@ -290,8 +318,12 @@ export function computeStrategyMetrics(
   };
 }
 
-export function computeStrategyScore(metrics: CardStrategyMetrics, level: number): number {
-  const weights = LEVEL_WEIGHTS[level] || LEVEL_WEIGHTS[3];
+export function computeStrategyScore(
+  metrics: CardStrategyMetrics,
+  level: number,
+  weightOverride?: StrategyWeights,
+): number {
+  const weights = weightOverride ?? LEVEL_WEIGHTS[level] ?? LEVEL_WEIGHTS[3];
 
   const normalizedExpected = metrics.expectedScore;
   const normalizedFloor = metrics.floor;
@@ -320,6 +352,7 @@ export function scoreCardsWithStrategy(
   level: number,
   starterProbs?: Record<string, number | null> | null,
   playerIntelMap?: Record<string, PlayerIntel> | null,
+  weightOverride?: StrategyWeights,
 ): ScoredCardWithStrategy[] {
   console.log("[SCORE] scoreCardsWithStrategy called with starterProbs:", starterProbs ? Object.keys(starterProbs).length + " players" : "NONE", "playerIntelMap:", playerIntelMap ? Object.keys(playerIntelMap).length + " players" : "NONE");
   return cards
@@ -340,7 +373,7 @@ export function scoreCardsWithStrategy(
           : "Player not in squad";
         strategy.startProbability = 0;
       }
-      const strategyScore = computeStrategyScore(strategy, level);
+      const strategyScore = computeStrategyScore(strategy, level, weightOverride);
       return { ...base, strategy, strategyScore };
     })
     .sort((a, b) => b.strategyScore - a.strategyScore);

@@ -27,3 +27,18 @@ export const POSITION_SHORT: Record<string, string> = {
   Midfielder: "MID",
   Forward: "FWD",
 };
+
+// --- Projection Grade Styles ---
+
+export const GRADE_STYLES: Record<string, { text: string; bg: string }> = {
+  A: { text: "text-green-300", bg: "bg-green-500/80" },
+  B: { text: "text-blue-300", bg: "bg-blue-500/80" },
+  C: { text: "text-yellow-300", bg: "bg-yellow-500/80" },
+  D: { text: "text-orange-300", bg: "bg-orange-500/80" },
+  F: { text: "text-red-300", bg: "bg-red-500/80" },
+};
+
+export function getGradeStyle(grade: string | null | undefined) {
+  if (!grade) return null;
+  return GRADE_STYLES[grade.toUpperCase()] ?? GRADE_STYLES["C"];
+}

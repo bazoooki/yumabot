@@ -4,8 +4,6 @@ import { USER_CARDS_QUERY } from "@/lib/queries";
 import { prisma } from "@/lib/db";
 import type { SorareCard } from "@/lib/types";
 
-const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6 hours
-
 interface CardsResponse {
   user: {
     cards: {
@@ -62,15 +60,14 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Check cache first (unless force refresh)
+    // Cache is sticky: always serve it if it exists. Only refetch from
+    // Sorare when the caller explicitly asks with ?refresh=true.
     if (!forceRefresh) {
       const cached = await prisma.cardCache.findUnique({ where: { userSlug: slug } });
-      if (
-        cached &&
-        Date.now() - cached.fetchedAt.getTime() < CACHE_MAX_AGE_MS
-      ) {
+      if (cached) {
         const cards = JSON.parse(cached.cardsJson) as SorareCard[];
-        console.log(`[cards] Serving ${cards.length} cards from cache (age: ${Math.round((Date.now() - cached.fetchedAt.getTime()) / 60000)}min)`);
+        const ageMin = Math.round((Date.now() - cached.fetchedAt.getTime()) / 60000);
+        console.log(`[cards] Serving ${cards.length} cards from cache (age: ${ageMin}min)`);
         return NextResponse.json({
           cards,
           totalCount: cards.length,
@@ -80,7 +77,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch fresh from Sorare API
+    // Fetch fresh from Sorare API (no cache, or explicit refresh)
     console.log(`[cards] Fetching fresh cards for ${slug}...`);
     const allCards = await fetchFromSorare(slug);
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Medal, Trophy, Award, Shield } from "lucide-react";
+import { Medal, Trophy, Award, Shield, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/ui/query-error";
 import { CLAN_MEMBERS } from "@/lib/clan/members";
@@ -14,6 +14,8 @@ import { FetchTrigger } from "./fetch-trigger";
 import { PodiumsSection } from "./podiums-section";
 import { AchievementsSection } from "./achievements-section";
 import { ClanSection } from "./clan-section";
+import { UserEarningsSection } from "./user-earnings-section";
+import { StreakAchievementsPanel } from "./streak-achievements-panel";
 
 interface ResultsResponse {
   gameWeek: number;
@@ -62,6 +64,7 @@ async function fetchGameweeks(): Promise<number[]> {
 const SECTIONS = [
   { key: "podiums" as const, label: "Podiums", icon: Trophy },
   { key: "achievements" as const, label: "Achievements", icon: Award },
+  { key: "earnings" as const, label: "Earnings", icon: DollarSign },
   { key: "clan" as const, label: "Clan", icon: Shield },
 ];
 
@@ -176,50 +179,63 @@ export function ResultsTab() {
         </div>
       )}
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-6">
-        {resultsError ? (
-          <QueryError
-            error={
-              resultsError instanceof Error
-                ? resultsError
-                : new Error("Failed to load results")
-            }
-            retry={() => void refetchResults()}
-          />
-        ) : resultsLoading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-6 w-48" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-36 rounded-xl" />
-              ))}
+      {/* Content: left (existing sections) + right (streak achievements panel) */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-3 md:p-6 min-w-0">
+          {resultsError ? (
+            <QueryError
+              error={
+                resultsError instanceof Error
+                  ? resultsError
+                  : new Error("Failed to load results")
+              }
+              retry={() => void refetchResults()}
+            />
+          ) : resultsLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-6 w-48" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-36 rounded-xl" />
+                ))}
+              </div>
             </div>
-          </div>
-        ) : !hasData ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <Medal className="w-10 h-10 text-zinc-600" />
-            <p className="text-sm text-zinc-500 text-center">
-              No results fetched yet.
-              <br />
-              Click &quot;Fetch Results&quot; to load the current GW leaderboards.
-            </p>
-          </div>
-        ) : (
-          <>
-            {store.activeSection === "podiums" && (
-              <PodiumsSection
-                leaderboards={store.leaderboards}
-                clanSlugs={clanSlugs}
-              />
-            )}
-            {store.activeSection === "achievements" && (
-              <AchievementsSection achievements={store.achievements} />
-            )}
-            {store.activeSection === "clan" && (
-              <ClanSection leaderboards={store.leaderboards} />
-            )}
-          </>
+          ) : !hasData ? (
+            <div className="flex flex-col items-center justify-center py-20 space-y-4">
+              <Medal className="w-10 h-10 text-zinc-600" />
+              <p className="text-sm text-zinc-500 text-center">
+                No results fetched yet.
+                <br />
+                Click &quot;Fetch Results&quot; to load the current GW
+                leaderboards.
+              </p>
+            </div>
+          ) : (
+            <>
+              {store.activeSection === "podiums" && (
+                <PodiumsSection
+                  leaderboards={store.leaderboards}
+                  clanSlugs={clanSlugs}
+                />
+              )}
+              {store.activeSection === "achievements" && (
+                <AchievementsSection achievements={store.achievements} />
+              )}
+              {store.activeSection === "earnings" && (
+                <UserEarningsSection gameWeek={selectedGW} />
+              )}
+              {store.activeSection === "clan" && (
+                <ClanSection leaderboards={store.leaderboards} />
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Right side: Manager Achievements panel (streak clearance counts) */}
+        {hasData && (
+          <aside className="hidden lg:flex flex-col w-[360px] xl:w-[400px] shrink-0 border-l border-zinc-800 bg-zinc-950/30 p-3 md:p-4 overflow-hidden">
+            <StreakAchievementsPanel gameWeek={selectedGW} />
+          </aside>
         )}
       </div>
     </div>

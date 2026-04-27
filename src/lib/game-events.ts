@@ -6,6 +6,7 @@ const STAT_CONFIG: Record<string, { label: string; icon: string }> = {
   goal: { label: "Goal", icon: "⚽" },
   goals: { label: "Goal", icon: "⚽" },
   assist: { label: "Assist", icon: "👟" },
+  goal_assist: { label: "Assist", icon: "👟" },
   penalty_won: { label: "Penalty Won", icon: "🎯" },
   clean_sheet: { label: "Clean Sheet", icon: "🔒" },
   clean_sheet_60: { label: "Clean Sheet 60'", icon: "🔒" },
@@ -56,7 +57,6 @@ const STAT_CONFIG: Record<string, { label: string; icon: string }> = {
   double_double: { label: "Double-Double", icon: "🏆" },
   triple_double: { label: "Triple-Double", icon: "👑" },
   triple_triple: { label: "Triple-Triple", icon: "💎" },
-  level_score: { label: "Level Score", icon: "📈" },
 
   // Game events
   substitution: { label: "Substitution", icon: "🔄" },
@@ -65,8 +65,8 @@ const STAT_CONFIG: Record<string, { label: string; icon: string }> = {
   adjusted_total_scoring_att: { label: "Shot Adjusted", icon: "📝" },
 };
 
-/** Only show events above this point threshold (unless in ALWAYS_SHOW) */
-const MIN_POINTS_THRESHOLD = 1.5;
+/** Default minimum points threshold for feed events */
+export const DEFAULT_MIN_POINTS_THRESHOLD = 1.5;
 
 /** Always show regardless of points */
 const ALWAYS_SHOW = new Set([
@@ -95,6 +95,7 @@ type PrevState = Map<string, Map<string, number>>;
 export function diffGameStats(
   prev: PrevState,
   game: GameDetail,
+  minPointsThreshold = DEFAULT_MIN_POINTS_THRESHOLD,
 ): { events: GameEvent[]; nextState: PrevState } {
   const events: GameEvent[] = [];
   const nextState: PrevState = new Map();
@@ -104,6 +105,15 @@ export function diffGameStats(
     const slug = ps.anyPlayer.slug;
     const prevStats = prev.get(slug) ?? new Map<string, number>();
     const newStats = new Map<string, number>();
+    // A player is "fresh" (e.g. just subbed on) when we have no prior state at
+    // all for them. On their first observation we only want to seed state — not
+    // spam events for every stat they've accumulated.
+    const isFreshPlayer = prevStats.size === 0;
+
+    // level_score is a rollup of decisive-action bonuses. We never surface it
+    // directly — instead we use its delta as the pointsDelta for the specific
+    // decisive action (goal/assist/red card/…) that caused it.
+    let levelScoreDelta = 0;
 
     for (const stat of ps.detailedScore ?? []) {
       newStats.set(stat.stat, stat.totalScore);
@@ -111,10 +121,16 @@ export function diffGameStats(
       const prevScore = prevStats.get(stat.stat) ?? 0;
       const delta = stat.totalScore - prevScore;
 
+      if (stat.stat === "level_score") {
+        levelScoreDelta = Math.round(delta * 10) / 10;
+        continue;
+      }
+
       if (Math.abs(delta) < 0.01) continue;
+      if (isFreshPlayer) continue;
 
       const isImportant =
-        ALWAYS_SHOW.has(stat.stat) || Math.abs(delta) >= MIN_POINTS_THRESHOLD;
+        ALWAYS_SHOW.has(stat.stat) || Math.abs(delta) >= minPointsThreshold;
       if (!isImportant) continue;
 
       const isDecisive = (ps.positiveDecisiveStats ?? []).some(
@@ -143,44 +159,55 @@ export function diffGameStats(
       });
     }
 
-    // ── Detect decisive stats (goals, assists) from positiveDecisiveStats ──
-    // These may not appear as separate entries in detailedScore
-    const DECISIVE_STATS_TO_TRACK = new Set(["goals", "goal", "assist", "clean_sheet", "clean_sheet_60"]);
-    for (const ds of ps.positiveDecisiveStats ?? []) {
-      if (!DECISIVE_STATS_TO_TRACK.has(ds.stat)) continue;
-      const prevVal = prevStats.get(`_decisive_${ds.stat}`) ?? 0;
-      newStats.set(`_decisive_${ds.stat}`, ds.statValue);
-      if (prevVal === 0 && prevStats.size === 0) continue; // first fetch
-      if (ds.statValue <= prevVal) continue; // no change
-      // Only add if we didn't already emit this stat from detailedScore
-      const alreadyEmitted = events.some(
-        (e) => e.playerSlug === slug && (e.stat === ds.stat || (ds.stat === "goals" && e.stat === "goal")),
-      );
-      if (!alreadyEmitted) {
-        // Use level_score delta as the points impact (captures the full score jump: +25 first goal, +10 second)
-        const levelScoreEvent = events.find((e) => e.playerSlug === slug && e.stat === "level_score");
-        const pointsDelta = levelScoreEvent?.pointsDelta ?? Math.round(ds.totalScore * 10) / 10;
+    // ── Decisive stats (positive + negative) ──
+    // These may not appear in detailedScore — their points are rolled into
+    // level_score. Emit one proper event per stat whose statValue increased,
+    // using levelScoreDelta (if non-zero) as the points impact.
+    const decisiveEmitted: GameEvent[] = [];
+    const handleDecisive = (
+      ds: { stat: string; statValue: number; totalScore: number },
+      polarity: "decisive" | "negative",
+    ) => {
+      const key = `_decisive_${ds.stat}`;
+      const prevVal = prevStats.get(key) ?? 0;
+      newStats.set(key, ds.statValue);
+      if (isFreshPlayer) return;
+      if (ds.statValue <= prevVal) return;
 
-        // Remove the level_score event since the goal card will show the points
-        if (levelScoreEvent) {
-          const idx = events.indexOf(levelScoreEvent);
-          if (idx >= 0) events.splice(idx, 1);
-        }
+      // If detailedScore already produced an event for this same stat, skip
+      // to avoid duplication. (Aliases: goals ≡ goal, goal_assist ≡ assist.)
+      const aliases = new Set<string>([ds.stat]);
+      if (ds.stat === "goals") aliases.add("goal");
+      if (ds.stat === "goal") aliases.add("goals");
+      if (ds.stat === "goal_assist") aliases.add("assist");
+      if (ds.stat === "assist") aliases.add("goal_assist");
+      if (events.some((e) => e.playerSlug === slug && aliases.has(e.stat))) return;
 
-        events.push({
-          playerSlug: slug,
-          playerName: ps.anyPlayer.displayName,
-          teamCode: ps.anyPlayer.activeClub?.code ?? "",
-          minute: matchMinute,
-          stat: ds.stat,
-          category: "decisive",
-          pointsDelta,
-          newValue: ds.statValue,
-          playerTotalScore: Math.round(ps.score),
-          timestamp: Date.now(),
-        });
-      }
-    }
+      const pointsDelta = Math.abs(levelScoreDelta) >= 0.01
+        ? levelScoreDelta
+        : Math.round((ds.totalScore - 0) * 10) / 10;
+
+      const ev: GameEvent = {
+        playerSlug: slug,
+        playerName: ps.anyPlayer.displayName,
+        teamCode: ps.anyPlayer.activeClub?.code ?? "",
+        minute: matchMinute,
+        stat: ds.stat,
+        category: polarity,
+        pointsDelta,
+        newValue: ds.statValue,
+        playerTotalScore: Math.round(ps.score),
+        timestamp: Date.now(),
+      };
+      events.push(ev);
+      decisiveEmitted.push(ev);
+      // Once a decisive stat claims the level_score delta, don't re-apply it
+      // to a second decisive stat in the same poll.
+      levelScoreDelta = 0;
+    };
+
+    for (const ds of ps.positiveDecisiveStats ?? []) handleDecisive(ds, "decisive");
+    for (const ds of ps.negativeDecisiveStats ?? []) handleDecisive(ds, "negative");
 
     // ── Consolidate same-player events ──
 
@@ -319,7 +346,7 @@ const TRIGGER_STATS = new Set([
 ]);
 
 /** Stats that are secondary triggers (shown prominently but grouped with a goal) */
-const RELATED_TRIGGER_STATS = new Set(["assist"]);
+const RELATED_TRIGGER_STATS = new Set(["assist", "goal_assist"]);
 
 /** Stats that are ripple effects of a goal */
 const RIPPLE_STATS = new Set([
@@ -356,9 +383,6 @@ export function batchEvents(events: GameEvent[]): FeedItem[] {
     }
   }
 
-  // No trigger → no batching, return all events individually
-  if (triggers.length === 0) return events;
-
   // Build one batch per trigger event
   const result: FeedItem[] = [];
   const usedRelated = new Set<number>();
@@ -373,7 +397,7 @@ export function batchEvents(events: GameEvent[]): FeedItem[] {
       // Assists pair with goals (same team or just same batch if only one goal)
       if (
         (trigger.stat === "goal" || trigger.stat === "goals") &&
-        rt.stat === "assist"
+        (rt.stat === "assist" || rt.stat === "goal_assist")
       ) {
         // Same team → definitely paired
         if (rt.teamCode === trigger.teamCode || triggers.length === 1) {
@@ -412,16 +436,35 @@ export function batchEvents(events: GameEvent[]): FeedItem[] {
     result.push(batch);
   }
 
-  // Add unused related triggers as standalone
+  // Wrap an event as a solo batch (two-row "special event" card). Used for
+  // decisive/negative actions that warrant prominent rendering even when
+  // they aren't paired with anything else.
+  const soloBatch = (ev: GameEvent): BatchedGameEvent => ({
+    type: "batched",
+    id: `batch-${ev.playerSlug}-${ev.stat}-${ev.timestamp}`,
+    trigger: ev,
+    relatedTriggers: [],
+    affected: [],
+    minute: ev.minute,
+    timestamp: ev.timestamp,
+  });
+
+  // Unused related triggers (e.g. assist with no paired goal) → solo batch
   for (let i = 0; i < relatedTriggers.length; i++) {
-    if (!usedRelated.has(i)) result.push(relatedTriggers[i]);
+    if (!usedRelated.has(i)) result.push(soloBatch(relatedTriggers[i]));
   }
-  // Add unused ripples as standalone
+  // Unused ripples (e.g. clean sheet loss with no goal in batch) → solo batch
   for (let i = 0; i < ripples.length; i++) {
-    if (!usedRipples.has(i)) result.push(ripples[i]);
+    if (!usedRipples.has(i)) result.push(soloBatch(ripples[i]));
   }
-  // Add all standalone events
-  result.push(...standalone);
+  // Standalone decisive/negative events → solo batch; others stay as-is
+  for (const ev of standalone) {
+    if (ev.category === "decisive" || ev.category === "negative") {
+      result.push(soloBatch(ev));
+    } else {
+      result.push(ev);
+    }
+  }
 
   return result;
 }
