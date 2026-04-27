@@ -1,9 +1,14 @@
 import { gql } from "graphql-request";
 
 export const USER_CARDS_QUERY = gql`
-  query UserCards($slug: String!, $cursor: String, $first: Int = 50) {
+  query UserCards(
+    $slug: String!
+    $cursor: String
+    $first: Int = 50
+    $rarities: [Rarity!]
+  ) {
     user(slug: $slug) {
-      cards(first: $first, after: $cursor) {
+      cards(first: $first, after: $cursor, rarities: $rarities) {
         nodes {
           slug
           rarityTyped

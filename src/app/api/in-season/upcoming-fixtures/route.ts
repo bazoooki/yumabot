@@ -23,13 +23,33 @@ const RATE_LIMIT_KEY = "in-season-upcoming-fixtures:rate-limited-until";
 const DEFAULT_BACKOFF_MS = 60 * 1000;
 
 interface SorareErrorLike {
-  response?: { status?: number; headers?: { get?(name: string): string | null } };
+  response?: {
+    status?: number;
+    headers?:
+      | { get?(name: string): string | null }
+      | Record<string, string | string[] | undefined>;
+  };
+}
+
+type HeaderBag = NonNullable<NonNullable<SorareErrorLike["response"]>["headers"]>;
+
+function readHeader(headers: HeaderBag | undefined, name: string): string | null {
+  if (!headers) return null;
+  if (typeof (headers as { get?: unknown }).get === "function") {
+    return (
+      (headers as { get(n: string): string | null }).get(name) ?? null
+    );
+  }
+  const obj = headers as Record<string, string | string[] | undefined>;
+  const v = obj[name] ?? obj[name.toLowerCase()];
+  if (Array.isArray(v)) return v[0] ?? null;
+  return v ?? null;
 }
 
 function parseRetryAfterMs(err: unknown): number {
   const r = (err as SorareErrorLike | undefined)?.response;
   if (!r || r.status !== 429) return 0;
-  const header = r.headers?.get?.("retry-after");
+  const header = readHeader(r.headers, "retry-after");
   const seconds = header ? Number.parseInt(header, 10) : NaN;
   if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
   return DEFAULT_BACKOFF_MS;
