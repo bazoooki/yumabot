@@ -6,8 +6,8 @@ import { InSeasonWorkspace } from "@/components/in-season-workspace/workspace";
 export default function Page({
   params,
 }: {
-  params: Promise<{ competitionSlug: string }>;
+  params: Promise<{ forUserSlug: string }>;
 }) {
-  const { competitionSlug } = use(params);
-  return <InSeasonWorkspace competitionSlug={competitionSlug} />;
+  const { forUserSlug } = use(params);
+  return <InSeasonWorkspace forUserSlug={forUserSlug} leagueSlug={null} />;
 }

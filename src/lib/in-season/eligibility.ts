@@ -2,6 +2,20 @@ import type { InSeasonCompetition, SorareCard } from "@/lib/types";
 
 const CROSS_LEAGUE_KEYWORDS = ["challenger", "contender", "european", "global"];
 
+/**
+ * Stable, fixture-independent slug for a league name. Sorare's `so5League.slug`
+ * (and the outer `so5Leagues.slug`) is sometimes scoped to the fixture (e.g.
+ * `football-24-28-apr-2026-seasonal-germany`) which makes URLs unstable when
+ * switching GWs. Use this on the way OUT of the API parsers so anything we
+ * compare or put into a URL is consistent across weeks.
+ */
+export function slugifyLeague(name: string): string {
+  return (name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function isCrossLeagueCompetition(leagueName: string): boolean {
   const lower = leagueName.toLowerCase();
   return CROSS_LEAGUE_KEYWORDS.some((kw) => lower.includes(kw));

@@ -493,47 +493,62 @@ export const IN_SEASON_UPCOMING_QUERY = gql`
   }
 `;
 
-// Walks the next N upcoming fixtures so the route can pick the first one
-// that actually carries IN_SEASON leaderboards (skipping midweek fixtures
-// where in-season comps don't run).
+// Lists fixtures (metadata only) so the route can pick the in-season window.
+// Sorare returns these in descending order and rejects `so5Leagues` inside
+// a connection — so leaderboards are fetched per-fixture via
+// IN_SEASON_FIXTURE_LEAGUES_QUERY below. We deliberately do NOT pass an
+// aasmStates filter here — the default (all except preparing/cancelled)
+// gives us both the in-progress fixture and the upcoming ones, and we sort
+// + cut down by endDate in the route.
 export const IN_SEASON_UPCOMING_LIST_QUERY = gql`
   query InSeasonUpcomingList($first: Int!) {
     so5 {
-      so5Fixtures(
-        first: $first
-        sport: FOOTBALL
-        aasmStates: ["preparing", "opened"]
-      ) {
+      so5Fixtures(first: $first, sport: FOOTBALL) {
         nodes {
           slug
           aasmState
           gameWeek
           endDate
-          so5Leagues {
+        }
+      }
+    }
+  }
+`;
+
+// Per-fixture leaderboards — used to enumerate in-season comps for a given
+// fixture slug. Companion to IN_SEASON_UPCOMING_LIST_QUERY.
+export const IN_SEASON_FIXTURE_LEAGUES_QUERY = gql`
+  query InSeasonFixtureLeagues($slug: String!) {
+    so5 {
+      so5Fixture(slug: $slug) {
+        slug
+        aasmState
+        gameWeek
+        endDate
+        so5Leagues {
+          slug
+          displayName
+          iconUrl
+          so5Leaderboards(notRooms: true) {
             slug
             displayName
+            division
+            mainRarityType
+            seasonality
+            seasonalityName
+            teamsCap
+            cutOffDate
             iconUrl
-            so5Leaderboards(notRooms: true) {
+            stadiumUrl
+            canCompose {
+              value
+            }
+            so5LeaderboardGroup {
+              displayName
+            }
+            so5League {
               slug
               displayName
-              division
-              mainRarityType
-              seasonality
-              seasonalityName
-              teamsCap
-              cutOffDate
-              iconUrl
-              stadiumUrl
-              canCompose {
-                value
-              }
-              so5LeaderboardGroup {
-                displayName
-              }
-              so5League {
-                slug
-                displayName
-              }
             }
           }
         }

@@ -4,6 +4,7 @@ import {
   IN_SEASON_LIVE_QUERY,
   IN_SEASON_UPCOMING_QUERY,
   IN_SEASON_UPCOMING_LIST_QUERY,
+  IN_SEASON_FIXTURE_LEAGUES_QUERY,
   IN_SEASON_BY_FIXTURE_QUERY,
 } from "@/lib/queries";
 import {
@@ -12,6 +13,7 @@ import {
   mergeRewardBreakdowns,
 } from "@/lib/rewards";
 import { parseStreak } from "@/lib/in-season/parse-streak";
+import { slugifyLeague } from "@/lib/in-season/eligibility";
 import type {
   RarityType,
   InSeasonCompetition,
@@ -157,11 +159,12 @@ function parseLive(result: any, seasonalityFilter?: string): InSeasonCompetition
 
     const streak = parseStreak(first.so5Lineup?.thresholdsStreakTask);
 
+    const liveLeagueName = deriveLeagueName(lb);
     competitions.push({
       slug: lb.slug,
       displayName: lb.displayName ?? "",
-      leagueName: deriveLeagueName(lb),
-      leagueSlug: lb.so5League?.slug ?? "",
+      leagueName: liveLeagueName,
+      leagueSlug: slugifyLeague(liveLeagueName),
       seasonality: lb.seasonality,
       mainRarityType: (lb.mainRarityType as RarityType) ?? "limited",
       division: lb.division ?? 1,
@@ -211,11 +214,12 @@ function parseUpcoming(result: any): InSeasonCompetition[] {
         }),
       );
 
+      const upcomingLeagueName = deriveLeagueName(lb);
       competitions.push({
         slug: lb.slug,
         displayName: lb.displayName ?? "",
-        leagueName: deriveLeagueName(lb),
-        leagueSlug: lb.so5League?.slug ?? league.slug ?? "",
+        leagueName: upcomingLeagueName,
+        leagueSlug: slugifyLeague(upcomingLeagueName),
         seasonality: lb.seasonality,
         mainRarityType: (lb.mainRarityType as RarityType) ?? "limited",
         division: lb.division ?? 1,
@@ -265,32 +269,55 @@ export async function GET(request: Request) {
       result = await sorareClient.request(IN_SEASON_LIVE_QUERY, { userSlug });
     } else {
       // Walk the next few upcoming fixtures and pick the first with at least
-      // one IN_SEASON leaderboard. The immediately-next fixture is often a
-      // midweek slot (Champions/Europa) with no in-season comps; the actual
-      // weekend fixture (where in-season runs) sits behind it.
+      // one IN_SEASON leaderboard. The list query returns metadata only
+      // (Sorare's federation rejects nested so5Leagues on a connection), so
+      // we fan out per-fixture leaderboard queries and stop at the first hit.
       const listResult = (await sorareClient.request(
         IN_SEASON_UPCOMING_LIST_QUERY,
-        { first: 6 },
-      )) as { so5?: { so5Fixtures?: { nodes?: any[] } } };
-      const fixtures = listResult?.so5?.so5Fixtures?.nodes ?? [];
-      let chosen: any = null;
-      let chosenComps: InSeasonCompetition[] = [];
-      for (const f of fixtures) {
-        const comps = parseUpcoming({ so5: { so5Fixture: f } });
+        { first: 16 },
+      )) as {
+        so5?: {
+          so5Fixtures?: {
+            nodes?: Array<{
+              slug: string;
+              aasmState: string;
+              gameWeek: number;
+              endDate: string;
+            }>;
+          };
+        };
+      };
+      const allMeta = listResult?.so5?.so5Fixtures?.nodes ?? [];
+      // Sort ascending by endDate and keep recent + upcoming so the current
+      // in-progress GW shows up alongside the future ones.
+      const nowMs = Date.now();
+      const lookbackMs = 4 * 24 * 60 * 60 * 1000;
+      const meta = allMeta
+        .filter((m) => {
+          const t = new Date(m.endDate).getTime();
+          return Number.isFinite(t) && t >= nowMs - lookbackMs;
+        })
+        .sort(
+          (a, b) =>
+            new Date(a.endDate).getTime() - new Date(b.endDate).getTime(),
+        );
+      for (const m of meta) {
+        const detail = (await sorareClient.request(
+          IN_SEASON_FIXTURE_LEAGUES_QUERY,
+          { slug: m.slug },
+        )) as { so5?: { so5Fixture?: any } };
+        const fx = detail?.so5?.so5Fixture;
+        if (!fx) continue;
+        const comps = parseUpcoming({ so5: { so5Fixture: fx } });
         if (comps.length > 0) {
-          chosen = f;
-          chosenComps = comps;
-          break;
+          return NextResponse.json({
+            fixtureSlug: m.slug,
+            gameWeek: m.gameWeek,
+            endDate: m.endDate,
+            aasmState: m.aasmState,
+            competitions: comps,
+          });
         }
-      }
-      if (chosen) {
-        return NextResponse.json({
-          fixtureSlug: chosen.slug,
-          gameWeek: chosen.gameWeek,
-          endDate: chosen.endDate,
-          aasmState: chosen.aasmState,
-          competitions: chosenComps,
-        });
       }
       // Fallback: legacy single-fixture query (preserves prior behavior in
       // the unlikely event the list query returned nothing).

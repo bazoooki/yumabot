@@ -1,14 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
-import type { InSeasonCompetition, LineupPosition, SorareCard } from "@/lib/types";
+import { Search, ArrowDownUp } from "lucide-react";
+import type {
+  InSeasonCompetition,
+  LineupPosition,
+  SorareCard,
+} from "@/lib/types";
 import {
   POS_ORDER,
-  selectVisibleTeams,
   useWorkspaceStore,
 } from "@/lib/in-season/workspace-store";
 import { isEligibleForCompetition } from "@/lib/in-season/eligibility";
+import { usePlayerIntel } from "@/lib/hooks";
+import { estimateTotalScore } from "@/lib/ai-lineup";
 import { cn } from "@/lib/utils";
 import { CardPoolRow } from "./card-pool-row";
 import {
@@ -26,14 +31,63 @@ type PosFilter = "ALL" | LineupPosition;
 
 const POS_FILTERS: ReadonlyArray<PosFilter> = ["ALL", ...POS_ORDER];
 
+type SortKey = "score" | "power" | "form" | "time";
+type EligibilityFilter = "in-season" | "all";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  score: "Proj",
+  power: "Power",
+  form: "Form (L5)",
+  time: "Kickoff",
+};
+
+const SORT_ORDER: ReadonlyArray<SortKey> = ["score", "power", "form", "time"];
+
+function avgRecentSo5(card: SorareCard): number {
+  const list = card.rawRecentSo5;
+  if (!list || list.length === 0) return 0;
+  let sum = 0;
+  let n = 0;
+  for (const s of list) {
+    if (typeof s !== "number" || Number.isNaN(s)) continue;
+    sum += s;
+    n++;
+  }
+  return n > 0 ? sum / n : 0;
+}
+
+function powerNumeric(card: SorareCard): number {
+  const raw = card.power;
+  if (!raw) return 0;
+  const parsed = parseFloat(String(raw));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function kickoffMs(card: SorareCard): number {
+  const date = card.anyPlayer?.activeClub?.upcomingGames?.[0]?.date;
+  if (!date) return Number.POSITIVE_INFINITY;
+  const t = new Date(date).getTime();
+  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+}
+
 export function CardPool({ comp, cards }: CardPoolProps) {
   const drag = useWorkspaceStore((s) => s.drag);
   const setDrag = useWorkspaceStore((s) => s.setDrag);
   const dropToPool = useWorkspaceStore((s) => s.dropToPool);
-  const visibleTeams = useWorkspaceStore(selectVisibleTeams);
+  const allTeams = useWorkspaceStore((s) => s.teams);
+  const teamCount = useWorkspaceStore((s) => s.teamCount);
+  const visibleTeams = useMemo(
+    () => allTeams.slice(0, teamCount),
+    [allTeams, teamCount],
+  );
   const [hover, setHover] = useState(false);
   const [posFilter, setPosFilter] = useState<PosFilter>("ALL");
+  const [eligibilityFilter, setEligibilityFilter] =
+    useState<EligibilityFilter>("in-season");
+  const [sortKey, setSortKey] = useState<SortKey>("score");
   const [query, setQuery] = useState("");
+
+  const playerIntel = usePlayerIntel(cards);
 
   // Per-card "used in teams" map across the visible drafts.
   const usageBySlug = useMemo(() => {
@@ -51,16 +105,17 @@ export function CardPool({ comp, cards }: CardPoolProps) {
 
   const filteredGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const eligible = cards
+    const base = cards
       .filter((c) => c.anyPlayer?.activeClub?.upcomingGames?.[0])
+      .filter((c) => c.rarityTyped === comp.mainRarityType)
       .map((c) => ({
         card: c,
         pos: cardPrimaryPosition(c),
         isEligible: isEligibleForCompetition(c, comp),
-      }))
-      .filter((entry) => entry.card.rarityTyped === comp.mainRarityType);
+      }));
 
-    const filtered = eligible.filter(({ card, pos }) => {
+    const filtered = base.filter(({ card, pos, isEligible }) => {
+      if (eligibilityFilter === "in-season" && !isEligible) return false;
       if (posFilter !== "ALL" && pos !== posFilter) return false;
       if (q.length === 0) return true;
       const name = card.anyPlayer?.displayName?.toLowerCase() ?? "";
@@ -69,16 +124,22 @@ export function CardPool({ comp, cards }: CardPoolProps) {
       return name.includes(q) || club.includes(q) || code.includes(q);
     });
 
-    // Sort by primary projection (avg score for now) then start prob — we'll
-    // graduate to a composite smart score in a follow-up once playerIntel
-    // is plumbed end-to-end.
     filtered.sort((a, b) => {
-      const ax = a.card.anyPlayer?.averageScore ?? 0;
-      const bx = b.card.anyPlayer?.averageScore ?? 0;
-      return bx - ax;
+      switch (sortKey) {
+        case "score":
+          return estimateTotalScore([b.card]) - estimateTotalScore([a.card]);
+        case "power":
+          return powerNumeric(b.card) - powerNumeric(a.card);
+        case "form":
+          return avgRecentSo5(b.card) - avgRecentSo5(a.card);
+        case "time":
+          return kickoffMs(a.card) - kickoffMs(b.card);
+      }
     });
 
-    // Group by kickoff day (Sat / Sun / etc.)
+    // Group by kickoff day (Sat / Sun / etc.). The "time" sort is already
+    // chronological inside groups; for other sorts we still group by day so
+    // the user sees the matchday structure but ordered by their chosen metric.
     const groups = new Map<string, typeof filtered>();
     for (const entry of filtered) {
       const date = entry.card.anyPlayer?.activeClub?.upcomingGames?.[0]?.date;
@@ -94,7 +155,9 @@ export function CardPool({ comp, cards }: CardPoolProps) {
       groups.set(key, arr);
     }
     return Array.from(groups.entries());
-  }, [cards, comp, posFilter, query]);
+  }, [cards, comp, posFilter, eligibilityFilter, sortKey, query]);
+
+  const totalCount = filteredGroups.reduce((n, [, list]) => n + list.length, 0);
 
   const onDragOver = (e: React.DragEvent) => {
     if (drag?.from !== "slot") return;
@@ -135,6 +198,29 @@ export function CardPool({ comp, cards }: CardPoolProps) {
             className="w-full bg-zinc-900/60 border border-zinc-800 rounded-md pl-7 pr-2 py-1.5 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700"
           />
         </div>
+
+        {/* Eligibility toggle */}
+        <div className="flex items-center gap-1 p-0.5 rounded-md bg-zinc-950/60 border border-zinc-800">
+          {(["in-season", "all"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setEligibilityFilter(mode)}
+              className={cn(
+                "flex-1 mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-1 rounded transition-all",
+                eligibilityFilter === mode
+                  ? mode === "in-season"
+                    ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40"
+                    : "bg-zinc-800 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300",
+              )}
+            >
+              {mode === "in-season" ? "In-Season" : "All"}
+            </button>
+          ))}
+        </div>
+
+        {/* Position filter */}
         <div className="flex items-center gap-1 flex-wrap">
           {POS_FILTERS.map((p) => (
             <button
@@ -152,6 +238,34 @@ export function CardPool({ comp, cards }: CardPoolProps) {
             </button>
           ))}
         </div>
+
+        {/* Sort + count */}
+        <div className="flex items-center gap-1.5">
+          <ArrowDownUp className="w-3 h-3 text-zinc-500 shrink-0" />
+          <span className="mono text-[9px] uppercase tracking-wider text-zinc-500 shrink-0">
+            Sort
+          </span>
+          <div className="flex-1 flex items-center gap-1 flex-wrap">
+            {SORT_ORDER.map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setSortKey(k)}
+                className={cn(
+                  "mono text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border transition-all",
+                  sortKey === k
+                    ? "border-pink-500/40 bg-pink-500/15 text-pink-300"
+                    : "border-zinc-800 bg-zinc-900/40 text-zinc-500 hover:text-zinc-300",
+                )}
+              >
+                {SORT_LABELS[k]}
+              </button>
+            ))}
+          </div>
+          <span className="mono text-[9px] tabular-nums text-zinc-600">
+            {totalCount}
+          </span>
+        </div>
       </div>
 
       {hover && (
@@ -163,7 +277,9 @@ export function CardPool({ comp, cards }: CardPoolProps) {
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
         {filteredGroups.length === 0 ? (
           <div className="text-center py-8 mono text-[10px] uppercase text-zinc-600">
-            No eligible cards
+            {eligibilityFilter === "in-season"
+              ? "No in-season cards match"
+              : "No cards match"}
           </div>
         ) : (
           filteredGroups.map(([day, items]) => (
@@ -184,6 +300,12 @@ export function CardPool({ comp, cards }: CardPoolProps) {
                     card={entry.card}
                     usage={usageBySlug.get(entry.card.slug) ?? []}
                     isEligible={entry.isEligible}
+                    starterProb={
+                      entry.card.anyPlayer?.slug
+                        ? (playerIntel?.[entry.card.anyPlayer.slug]
+                            ?.starterProbability ?? null)
+                        : null
+                    }
                   />
                 ))}
               </div>

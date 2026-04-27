@@ -78,23 +78,34 @@ export function PlayerChip({
         <div className="relative shrink-0">
           <div
             className={cn(
-              "rounded-full border-2 border-zinc-700 bg-zinc-800 grid place-items-center overflow-hidden",
-              dense ? "w-7 h-7" : "w-8 h-8",
+              "rounded-md border border-zinc-700/80 bg-zinc-800 overflow-hidden",
+              dense ? "w-8 h-10" : "w-9 h-11",
             )}
           >
-            {player.avatarPictureUrl ? (
+            {card.pictureUrl ? (
+              <Image
+                src={card.pictureUrl}
+                alt={player.displayName}
+                width={dense ? 32 : 36}
+                height={dense ? 40 : 44}
+                className="object-cover object-[center_18%] w-full h-full scale-150"
+                sizes={dense ? "32px" : "36px"}
+              />
+            ) : player.avatarPictureUrl ? (
               <Image
                 src={player.avatarPictureUrl}
                 alt={player.displayName}
-                width={dense ? 28 : 32}
-                height={dense ? 28 : 32}
+                width={dense ? 32 : 36}
+                height={dense ? 40 : 44}
                 className="object-cover w-full h-full"
-                sizes={dense ? "28px" : "32px"}
+                sizes={dense ? "32px" : "36px"}
               />
             ) : (
-              <span className="mono text-[9px] font-bold text-zinc-300">
-                {player.displayName.slice(0, 2).toUpperCase()}
-              </span>
+              <div className="grid place-items-center w-full h-full">
+                <span className="mono text-[9px] font-bold text-zinc-300">
+                  {player.displayName.slice(0, 2).toUpperCase()}
+                </span>
+              </div>
             )}
           </div>
           {captain && (

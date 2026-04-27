@@ -1,33 +1,83 @@
 "use client";
 
+import { useMemo } from "react";
 import { Sparkles } from "lucide-react";
 import type { InSeasonCompetition } from "@/lib/types";
 import { isCrossLeagueCompetition } from "@/lib/in-season/eligibility";
 import { CompetitionCard } from "./competition-card";
 
+export interface SidebarLeague {
+  leagueSlug: string;
+  leagueName: string;
+  iconUrl: string | null;
+  /** The leaderboard we land on when this league is selected (lowest-division Limited). */
+  rep: InSeasonCompetition;
+  variantsCount: number;
+}
+
 interface CompetitionsSidebarProps {
   competitions: InSeasonCompetition[];
   gameWeek: number | null;
   fixtureLabel: string | null;
-  selectedSlug: string;
+  selectedLeagueSlug: string;
   filledCounts: Map<string, number>;
-  onSelect(slug: string): void;
+  onSelectLeague(leagueSlug: string): void;
+}
+
+function dedupeByLeague(competitions: InSeasonCompetition[]): SidebarLeague[] {
+  const groups = new Map<string, InSeasonCompetition[]>();
+  for (const c of competitions) {
+    const arr = groups.get(c.leagueSlug) ?? [];
+    arr.push(c);
+    groups.set(c.leagueSlug, arr);
+  }
+  const leagues: SidebarLeague[] = [];
+  for (const [slug, comps] of groups) {
+    // Prefer Limited rarity, lowest division as the visible representative.
+    const limited = comps.filter((c) => c.mainRarityType === "limited");
+    const pool = limited.length > 0 ? limited : comps;
+    const rep =
+      pool.slice().sort((a, b) => a.division - b.division)[0] ?? comps[0];
+    leagues.push({
+      leagueSlug: slug,
+      leagueName: rep.leagueName,
+      iconUrl: rep.iconUrl || null,
+      rep,
+      variantsCount: comps.length,
+    });
+  }
+  leagues.sort((a, b) => a.leagueName.localeCompare(b.leagueName));
+  return leagues;
 }
 
 export function CompetitionsSidebar({
   competitions,
   gameWeek,
   fixtureLabel,
-  selectedSlug,
+  selectedLeagueSlug,
   filledCounts,
-  onSelect,
+  onSelectLeague,
 }: CompetitionsSidebarProps) {
-  const single = competitions.filter(
-    (c) => !isCrossLeagueCompetition(c.leagueName),
+  const leagues = useMemo(() => dedupeByLeague(competitions), [competitions]);
+  const single = useMemo(
+    () => leagues.filter((l) => !isCrossLeagueCompetition(l.leagueName)),
+    [leagues],
   );
-  const cross = competitions.filter((c) =>
-    isCrossLeagueCompetition(c.leagueName),
+  const cross = useMemo(
+    () => leagues.filter((l) => isCrossLeagueCompetition(l.leagueName)),
+    [leagues],
   );
+
+  // Filled counts are stored against representative leaderboard slugs — sum
+  // them up per league so the sidebar count includes drafts on any variant.
+  const leagueFilledCount = (leagueSlug: string) => {
+    let total = 0;
+    for (const c of competitions) {
+      if (c.leagueSlug !== leagueSlug) continue;
+      total += filledCounts.get(c.slug) ?? 0;
+    }
+    return Math.min(total, 4);
+  };
 
   return (
     <aside className="w-[260px] shrink-0 border-r border-zinc-800/80 bg-zinc-950/40 flex flex-col">
@@ -53,13 +103,13 @@ export function CompetitionsSidebar({
             <div className="mono text-[9px] uppercase tracking-wider text-zinc-600 px-1 mt-1 mb-1">
               Single League · {single.length}
             </div>
-            {single.map((c) => (
+            {single.map((l) => (
               <CompetitionCard
-                key={c.slug}
-                comp={c}
-                isSelected={c.slug === selectedSlug}
-                filledCount={filledCounts.get(c.slug) ?? 0}
-                onSelect={onSelect}
+                key={l.leagueSlug}
+                league={l}
+                isSelected={l.leagueSlug === selectedLeagueSlug}
+                filledCount={leagueFilledCount(l.leagueSlug)}
+                onSelect={onSelectLeague}
               />
             ))}
           </>
@@ -70,13 +120,13 @@ export function CompetitionsSidebar({
             <div className="mono text-[9px] uppercase tracking-wider text-zinc-600 px-1 mt-3 mb-1">
               Cross-League · {cross.length}
             </div>
-            {cross.map((c) => (
+            {cross.map((l) => (
               <CompetitionCard
-                key={c.slug}
-                comp={c}
-                isSelected={c.slug === selectedSlug}
-                filledCount={filledCounts.get(c.slug) ?? 0}
-                onSelect={onSelect}
+                key={l.leagueSlug}
+                league={l}
+                isSelected={l.leagueSlug === selectedLeagueSlug}
+                filledCount={leagueFilledCount(l.leagueSlug)}
+                onSelect={onSelectLeague}
               />
             ))}
           </>
@@ -91,7 +141,7 @@ export function CompetitionsSidebar({
         >
           <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
           <span className="text-[11px] text-zinc-300 font-semibold">
-            Auto-fill all competitions
+            Auto-fill all leagues
           </span>
         </button>
       </div>

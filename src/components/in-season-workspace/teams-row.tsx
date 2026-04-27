@@ -1,11 +1,9 @@
 "use client";
 
+import { useMemo } from "react";
 import { Plus } from "lucide-react";
 import type { InSeasonCompetition, SorareCard } from "@/lib/types";
-import {
-  selectVisibleTeams,
-  useWorkspaceStore,
-} from "@/lib/in-season/workspace-store";
+import { useWorkspaceStore } from "@/lib/in-season/workspace-store";
 import { TeamColumn } from "./team-column";
 
 interface TeamsRowProps {
@@ -15,9 +13,13 @@ interface TeamsRowProps {
 }
 
 export function TeamsRow({ competition, cardsBySlug, target }: TeamsRowProps) {
-  const teams = useWorkspaceStore(selectVisibleTeams);
+  const allTeams = useWorkspaceStore((s) => s.teams);
   const teamCount = useWorkspaceStore((s) => s.teamCount);
   const setTeamCount = useWorkspaceStore((s) => s.setTeamCount);
+  const teams = useMemo(
+    () => allTeams.slice(0, teamCount),
+    [allTeams, teamCount],
+  );
 
   return (
     <div className="flex-1 p-3 overflow-x-auto">

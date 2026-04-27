@@ -306,9 +306,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   reset: () => set({ ...initialState, teams: initialTeams() }),
 }));
 
-export function selectVisibleTeams(state: WorkspaceStore): WorkspaceTeam[] {
-  return state.teams.slice(0, state.teamCount);
-}
+// Note: don't expose a `selectVisibleTeams` selector here. Using it via
+// `useWorkspaceStore(selectVisibleTeams)` returns a fresh `slice()` array on
+// every read, which trips React's `useSyncExternalStore` snapshot cache and
+// loops the renderer. Subscribe to `teams` + `teamCount` separately and
+// derive with `useMemo` in the component instead.
 
 export function selectWorkspacePayload(state: WorkspaceStore): WorkspacePayload {
   return {

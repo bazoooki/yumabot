@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useCards } from "@/providers/cards-provider";
 import { useWorkspaceStore } from "@/lib/in-season/workspace-store";
 import { useWorkspaceAutosave } from "@/lib/in-season/use-workspace-autosave";
 import type { InSeasonCompetition, SorareCard } from "@/lib/types";
-import { ChevronLeft } from "lucide-react";
 import { CompetitionsSidebar } from "./competitions-sidebar";
 import { WorkspaceSubHeader } from "./workspace-sub-header";
 import { ThresholdStrip } from "./threshold-strip";
@@ -16,13 +14,33 @@ import { TeamsRow } from "./teams-row";
 import { CardPool } from "./card-pool";
 import { DragIndicator } from "./drag-indicator";
 import { NotesDrawer } from "./notes-drawer";
+import { GwStrip, type GwStripFixture } from "./gw-strip";
 
-interface CompetitionsResponse {
-  fixtureSlug: string;
+/**
+ * Within a fixture's competitions, return the representative leaderboard for
+ * a given league. Prefers Limited rarity and the lowest division.
+ */
+function pickRepresentativeForLeague(
+  competitions: InSeasonCompetition[],
+  leagueSlug: string,
+): InSeasonCompetition | null {
+  const inLeague = competitions.filter((c) => c.leagueSlug === leagueSlug);
+  if (inLeague.length === 0) return null;
+  const limited = inLeague.filter((c) => c.mainRarityType === "limited");
+  const pool = limited.length > 0 ? limited : inLeague;
+  return pool.slice().sort((a, b) => a.division - b.division)[0] ?? null;
+}
+
+interface UpcomingFixture {
+  slug: string;
   gameWeek: number;
   endDate: string;
   aasmState: string;
   competitions: InSeasonCompetition[];
+}
+
+interface UpcomingFixturesResponse {
+  fixtures: UpcomingFixture[];
 }
 
 interface DraftPayload {
@@ -46,11 +64,9 @@ interface DraftsListResponse {
   }>;
 }
 
-async function fetchCompetitions(userSlug: string): Promise<CompetitionsResponse> {
-  const res = await fetch(
-    `/api/in-season/competitions?userSlug=${encodeURIComponent(userSlug)}&type=UPCOMING`,
-  );
-  if (!res.ok) throw new Error("Failed to load competitions");
+async function fetchUpcomingFixtures(): Promise<UpcomingFixturesResponse> {
+  const res = await fetch(`/api/in-season/upcoming-fixtures`);
+  if (!res.ok) throw new Error("Failed to load upcoming fixtures");
   return res.json();
 }
 
@@ -95,19 +111,27 @@ function countFilledTeams(payload: DraftPayload | undefined): number {
   return count;
 }
 
+interface InSeasonWorkspaceProps {
+  forUserSlug: string;
+  /** Optional — when null, the workspace defaults to the first league of the
+   *  active fixture. Driven by the URL path. */
+  leagueSlug: string | null;
+}
+
 export function InSeasonWorkspace({
-  competitionSlug,
-}: {
-  competitionSlug: string;
-}) {
-  const { userSlug, cards: ownCards } = useCards();
+  forUserSlug,
+  leagueSlug,
+}: InSeasonWorkspaceProps) {
+  const { userSlug: currentUserSlug, cards: ownCards } = useCards();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const forUserSlug = searchParams.get("for") ?? userSlug ?? "";
-  const helperQuery = searchParams.get("for") ? `?for=${searchParams.get("for")}` : "";
+  const gwParam = searchParams.get("gw");
 
-  // When helping another user, fetch their gallery; otherwise reuse the
-  // logged-in user's cards from the provider.
+  // The logged-in user owns the draft row; `forUserSlug` is who the draft is
+  // built FOR (self or clan member).
+  const userSlug = currentUserSlug ?? "";
+  const isHelper = !!userSlug && forUserSlug !== userSlug;
+
   const helperCardsQuery = useQuery({
     queryKey: ["cards", forUserSlug],
     queryFn: async () => {
@@ -118,16 +142,13 @@ export function InSeasonWorkspace({
       const data = (await res.json()) as { cards: SorareCard[] };
       return data.cards ?? [];
     },
-    enabled: !!forUserSlug && forUserSlug !== userSlug,
+    enabled: isHelper,
     staleTime: 5 * 60 * 1000,
   });
 
   const galleryCards = useMemo<SorareCard[]>(
-    () =>
-      forUserSlug && forUserSlug !== userSlug
-        ? (helperCardsQuery.data ?? [])
-        : ownCards,
-    [forUserSlug, userSlug, helperCardsQuery.data, ownCards],
+    () => (isHelper ? (helperCardsQuery.data ?? []) : ownCards),
+    [isHelper, helperCardsQuery.data, ownCards],
   );
 
   const cardsBySlug = useMemo(() => {
@@ -136,23 +157,55 @@ export function InSeasonWorkspace({
     return m;
   }, [galleryCards]);
 
-  const competitionsQuery = useQuery({
-    queryKey: ["in-season-competitions", userSlug, "UPCOMING"],
-    queryFn: () => fetchCompetitions(userSlug ?? ""),
-    enabled: !!userSlug,
+  const fixturesQuery = useQuery({
+    queryKey: ["in-season-upcoming-fixtures"],
+    queryFn: fetchUpcomingFixtures,
     staleTime: 5 * 60 * 1000,
   });
 
-  const fixtureSlug = competitionsQuery.data?.fixtureSlug ?? null;
-  const competitions = useMemo(
-    () => competitionsQuery.data?.competitions ?? [],
-    [competitionsQuery.data?.competitions],
+  const fixtures = useMemo(
+    () => fixturesQuery.data?.fixtures ?? [],
+    [fixturesQuery.data?.fixtures],
   );
-  const selected = competitions.find((c) => c.slug === competitionSlug) ?? null;
+
+  // Active fixture: respects ?gw=<num>; else the first (= next in-season GW).
+  const activeFixture = useMemo(() => {
+    if (fixtures.length === 0) return null;
+    if (gwParam) {
+      const parsed = Number.parseInt(gwParam, 10);
+      const match = fixtures.find((f) => f.gameWeek === parsed);
+      if (match) return match;
+    }
+    return fixtures[0];
+  }, [fixtures, gwParam]);
+
+  const fixtureSlug = activeFixture?.slug ?? null;
+  const competitions = useMemo(
+    () => activeFixture?.competitions ?? [],
+    [activeFixture],
+  );
+
+  // Resolve the active competition (leaderboard) from leagueSlug.
+  // - if a league is in the URL: pick the lowest-division Limited within it
+  // - else: default to the first league's representative
+  const selected = useMemo(() => {
+    if (competitions.length === 0) return null;
+    if (leagueSlug) {
+      const rep = pickRepresentativeForLeague(competitions, leagueSlug);
+      if (rep) return rep;
+    }
+    // Default: first league's representative
+    const firstLeague = competitions[0]?.leagueSlug;
+    return firstLeague
+      ? pickRepresentativeForLeague(competitions, firstLeague)
+      : null;
+  }, [competitions, leagueSlug]);
+
+  const competitionSlug = selected?.slug ?? "";
 
   const draftsListQuery = useQuery({
     queryKey: ["in-season-drafts-list", userSlug, fixtureSlug],
-    queryFn: () => fetchDraftsList(userSlug!, fixtureSlug!),
+    queryFn: () => fetchDraftsList(userSlug, fixtureSlug!),
     enabled: !!userSlug && !!fixtureSlug,
     staleTime: 60 * 1000,
   });
@@ -166,15 +219,22 @@ export function InSeasonWorkspace({
   }, [draftsListQuery.data?.drafts]);
 
   const draftQuery = useQuery({
-    queryKey: ["in-season-draft", userSlug, forUserSlug, competitionSlug, fixtureSlug],
+    queryKey: [
+      "in-season-draft",
+      userSlug,
+      forUserSlug,
+      competitionSlug,
+      fixtureSlug,
+    ],
     queryFn: () =>
       fetchDraft({
-        userSlug: userSlug!,
+        userSlug,
         forUserSlug,
         competitionSlug,
         fixtureSlug: fixtureSlug!,
       }),
-    enabled: !!userSlug && !!forUserSlug && !!fixtureSlug,
+    enabled:
+      !!userSlug && !!forUserSlug && !!competitionSlug && !!fixtureSlug,
     staleTime: 60 * 1000,
   });
 
@@ -209,78 +269,88 @@ export function InSeasonWorkspace({
 
   const autosave = useWorkspaceAutosave();
 
-  const handleSelectComp = useCallback(
-    (slug: string) => {
-      router.push(`/in-season/${slug}${helperQuery}`);
+  const buildPath = useCallback(
+    (targetLeagueSlug: string | null, gw: number | null) => {
+      const base = targetLeagueSlug
+        ? `/in-season/${forUserSlug}/${targetLeagueSlug}`
+        : `/in-season/${forUserSlug}`;
+      const qs = gw != null ? `?gw=${gw}` : "";
+      return base + qs;
     },
-    [router, helperQuery],
+    [forUserSlug],
   );
 
-  if (competitionsQuery.isLoading) {
+  const handleSelectLeague = useCallback(
+    (nextLeagueSlug: string) => {
+      router.push(buildPath(nextLeagueSlug, activeFixture?.gameWeek ?? null));
+    },
+    [router, buildPath, activeFixture?.gameWeek],
+  );
+
+  const handleSelectFixture = useCallback(
+    (fx: GwStripFixture) => {
+      const target = fixtures.find((f) => f.slug === fx.slug);
+      if (!target) return;
+      // Try to keep the same league across GWs; if not present, fall back to
+      // the new fixture's first league.
+      const stillThere =
+        leagueSlug && target.competitions.some((c) => c.leagueSlug === leagueSlug)
+          ? leagueSlug
+          : (target.competitions[0]?.leagueSlug ?? null);
+      router.replace(buildPath(stillThere, target.gameWeek));
+    },
+    [fixtures, leagueSlug, router, buildPath],
+  );
+
+  const stripFixtures: GwStripFixture[] = useMemo(
+    () =>
+      fixtures.map((f) => ({
+        slug: f.slug,
+        gameWeek: f.gameWeek,
+        endDate: f.endDate,
+        aasmState: f.aasmState,
+        competitionsCount: f.competitions.length,
+      })),
+    [fixtures],
+  );
+
+  if (fixturesQuery.isLoading) {
     return (
       <div className="flex-1 grid place-items-center text-zinc-500 text-sm">
-        Loading competitions…
+        Loading in-season fixtures…
       </div>
     );
   }
 
-  if (!selected) {
-    const first = competitions[0];
+  if (fixtures.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-zinc-400 px-6 text-center">
         <p className="text-sm">
-          Competition <span className="font-mono text-zinc-300">{competitionSlug}</span>{" "}
-          isn&apos;t in the upcoming weekend fixture
-          {competitionsQuery.data?.gameWeek
-            ? ` (GW${competitionsQuery.data.gameWeek})`
-            : ""}
-          .
+          No in-season competitions found in the next upcoming fixtures.
         </p>
-        {first ? (
-          <Link
-            href={`/in-season/${first.slug}${helperQuery}`}
-            className="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1 px-3 py-1.5 rounded border border-amber-500/30 bg-amber-500/10"
-          >
-            Open {first.leagueName} ({first.mainRarityType}) instead
-          </Link>
-        ) : (
-          <p className="text-xs text-zinc-500">
-            No in-season competitions found in the upcoming fixtures.
-          </p>
-        )}
-        <Link
-          href="/in-season"
-          className="text-xs text-zinc-500 hover:text-zinc-300 inline-flex items-center gap-1"
-        >
-          <ChevronLeft className="w-3 h-3" /> Back to In Season
-        </Link>
+        <p className="text-xs text-zinc-500">
+          Sorare may be between fixture cycles. Check back shortly.
+        </p>
       </div>
     );
   }
 
-  const isHelper = forUserSlug !== userSlug;
-  const lockCountdown = formatLockCountdown(selected.cutOffDate);
+  const lockCountdown = selected
+    ? formatLockCountdown(selected.cutOffDate)
+    : null;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-zinc-950">
       {/* Page header */}
       <div className="px-5 py-2.5 border-b border-zinc-800/80 flex items-baseline gap-3 bg-zinc-950/30">
-        <Link
-          href="/in-season"
-          className="text-zinc-500 hover:text-zinc-300 inline-flex items-center"
-          aria-label="Back to In Season"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </Link>
         <h1 className="text-lg font-bold text-zinc-100 tracking-tight">In Season</h1>
         <span className="text-[11px] text-zinc-500">
           Build up to 4 teams in parallel · drag-and-drop
         </span>
-        {isHelper && (
-          <span className="text-[10px] mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30">
-            Helping {forUserSlug}
-          </span>
-        )}
+        <span className="mono text-[10px] text-zinc-500">·</span>
+        <span className="mono text-[10px] uppercase tracking-wider text-zinc-400">
+          {isHelper ? `Helping ${forUserSlug}` : forUserSlug}
+        </span>
         <div className="ml-auto flex items-center gap-3 mono text-[10px] uppercase tracking-wider">
           <SaveIndicator status={autosave} />
           {lockCountdown && (
@@ -294,26 +364,42 @@ export function InSeasonWorkspace({
         </div>
       </div>
 
+      <GwStrip
+        fixtures={stripFixtures}
+        activeFixtureSlug={activeFixture?.slug ?? null}
+        onSelect={handleSelectFixture}
+      />
+
       <NotesDrawer />
 
       {/* 3-column body */}
       <div className="flex-1 flex overflow-hidden">
         <CompetitionsSidebar
           competitions={competitions}
-          gameWeek={competitionsQuery.data?.gameWeek ?? null}
-          fixtureLabel={formatFixtureLabel(competitionsQuery.data?.endDate ?? null)}
-          selectedSlug={competitionSlug}
+          gameWeek={activeFixture?.gameWeek ?? null}
+          fixtureLabel={formatFixtureLabel(activeFixture?.endDate ?? null)}
+          selectedLeagueSlug={selected?.leagueSlug ?? ""}
           filledCounts={filledCounts}
-          onSelect={handleSelectComp}
+          onSelectLeague={handleSelectLeague}
         />
 
         {/* Main */}
         <main className="flex-1 flex flex-col min-w-0">
-          <WorkspaceMain selected={selected} cardsBySlug={cardsBySlug} />
+          {selected ? (
+            <WorkspaceMain selected={selected} cardsBySlug={cardsBySlug} />
+          ) : (
+            <div className="flex-1 grid place-items-center text-zinc-600 text-xs">
+              No leagues in this game week.
+            </div>
+          )}
         </main>
 
         <div className="w-[340px] shrink-0">
-          <CardPool comp={selected} cards={galleryCards} />
+          {selected ? (
+            <CardPool comp={selected} cards={galleryCards} />
+          ) : (
+            <div className="h-full bg-zinc-950/40 border-l border-zinc-800/80" />
+          )}
         </div>
       </div>
 

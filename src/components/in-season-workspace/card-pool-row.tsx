@@ -28,9 +28,16 @@ interface CardPoolRowProps {
   /** Indexes of teams that already use this card (multi-team contention badge). */
   usage: number[];
   isEligible: boolean;
+  /** Starter probability (0-100) from playerIntel. Optional. */
+  starterProb?: number | null;
 }
 
-export function CardPoolRow({ card, usage, isEligible }: CardPoolRowProps) {
+export function CardPoolRow({
+  card,
+  usage,
+  isEligible,
+  starterProb,
+}: CardPoolRowProps) {
   const drag = useWorkspaceStore((s) => s.drag);
   const setDrag = useWorkspaceStore((s) => s.setDrag);
 
@@ -88,20 +95,31 @@ export function CardPoolRow({ card, usage, isEligible }: CardPoolRowProps) {
       <div className="flex items-center gap-2">
         <GripVertical className="w-3 h-3 text-zinc-600 shrink-0" />
         <div className="relative shrink-0">
-          <div className="w-9 h-9 rounded-full border-2 border-zinc-700 bg-zinc-800 grid place-items-center overflow-hidden">
-            {player.avatarPictureUrl ? (
+          <div className="w-9 h-12 rounded-md border border-zinc-700/80 bg-zinc-800 overflow-hidden">
+            {card.pictureUrl ? (
+              <Image
+                src={card.pictureUrl}
+                alt={player.displayName}
+                width={36}
+                height={48}
+                className="object-cover object-[center_18%] w-full h-full scale-150"
+                sizes="36px"
+              />
+            ) : player.avatarPictureUrl ? (
               <Image
                 src={player.avatarPictureUrl}
                 alt={player.displayName}
                 width={36}
-                height={36}
+                height={48}
                 className="object-cover w-full h-full"
                 sizes="36px"
               />
             ) : (
-              <span className="mono text-[10px] font-bold text-zinc-300">
-                {player.displayName.slice(0, 2).toUpperCase()}
-              </span>
+              <div className="grid place-items-center w-full h-full">
+                <span className="mono text-[10px] font-bold text-zinc-300">
+                  {player.displayName.slice(0, 2).toUpperCase()}
+                </span>
+              </div>
             )}
           </div>
           <span
@@ -150,8 +168,22 @@ export function CardPoolRow({ card, usage, isEligible }: CardPoolRowProps) {
             )}
           </div>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 text-right space-y-0.5">
           <ProjBadge card={card} />
+          {typeof starterProb === "number" && (
+            <div
+              className={cn(
+                "mono text-[8px] font-bold uppercase",
+                starterProb >= 80
+                  ? "text-emerald-400"
+                  : starterProb >= 50
+                    ? "text-amber-400"
+                    : "text-red-400",
+              )}
+            >
+              {starterProb}% start
+            </div>
+          )}
         </div>
       </div>
       {used && (
