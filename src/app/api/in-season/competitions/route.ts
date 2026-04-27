@@ -3,6 +3,7 @@ import { sorareClient } from "@/lib/sorare-client";
 import {
   IN_SEASON_LIVE_QUERY,
   IN_SEASON_UPCOMING_QUERY,
+  IN_SEASON_UPCOMING_LIST_QUERY,
   IN_SEASON_BY_FIXTURE_QUERY,
 } from "@/lib/queries";
 import {
@@ -263,6 +264,36 @@ export async function GET(request: Request) {
     } else if (fixtureType === "LIVE") {
       result = await sorareClient.request(IN_SEASON_LIVE_QUERY, { userSlug });
     } else {
+      // Walk the next few upcoming fixtures and pick the first with at least
+      // one IN_SEASON leaderboard. The immediately-next fixture is often a
+      // midweek slot (Champions/Europa) with no in-season comps; the actual
+      // weekend fixture (where in-season runs) sits behind it.
+      const listResult = (await sorareClient.request(
+        IN_SEASON_UPCOMING_LIST_QUERY,
+        { first: 6 },
+      )) as { so5?: { so5Fixtures?: { nodes?: any[] } } };
+      const fixtures = listResult?.so5?.so5Fixtures?.nodes ?? [];
+      let chosen: any = null;
+      let chosenComps: InSeasonCompetition[] = [];
+      for (const f of fixtures) {
+        const comps = parseUpcoming({ so5: { so5Fixture: f } });
+        if (comps.length > 0) {
+          chosen = f;
+          chosenComps = comps;
+          break;
+        }
+      }
+      if (chosen) {
+        return NextResponse.json({
+          fixtureSlug: chosen.slug,
+          gameWeek: chosen.gameWeek,
+          endDate: chosen.endDate,
+          aasmState: chosen.aasmState,
+          competitions: chosenComps,
+        });
+      }
+      // Fallback: legacy single-fixture query (preserves prior behavior in
+      // the unlikely event the list query returned nothing).
       result = await sorareClient.request(IN_SEASON_UPCOMING_QUERY);
     }
 

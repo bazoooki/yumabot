@@ -493,6 +493,55 @@ export const IN_SEASON_UPCOMING_QUERY = gql`
   }
 `;
 
+// Walks the next N upcoming fixtures so the route can pick the first one
+// that actually carries IN_SEASON leaderboards (skipping midweek fixtures
+// where in-season comps don't run).
+export const IN_SEASON_UPCOMING_LIST_QUERY = gql`
+  query InSeasonUpcomingList($first: Int!) {
+    so5 {
+      so5Fixtures(
+        first: $first
+        sport: FOOTBALL
+        aasmStates: ["preparing", "opened"]
+      ) {
+        nodes {
+          slug
+          aasmState
+          gameWeek
+          endDate
+          so5Leagues {
+            slug
+            displayName
+            iconUrl
+            so5Leaderboards(notRooms: true) {
+              slug
+              displayName
+              division
+              mainRarityType
+              seasonality
+              seasonalityName
+              teamsCap
+              cutOffDate
+              iconUrl
+              stadiumUrl
+              canCompose {
+                value
+              }
+              so5LeaderboardGroup {
+                displayName
+              }
+              so5League {
+                slug
+                displayName
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const GAME_DETAIL_QUERY = gql`
   query GameDetail($gameId: ID!) {
     anyGame(id: $gameId) {

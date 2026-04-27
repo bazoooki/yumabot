@@ -225,12 +225,32 @@ export function InSeasonWorkspace({
   }
 
   if (!selected) {
+    const first = competitions[0];
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-zinc-400">
-        <p className="text-sm">Competition not found in the upcoming fixture.</p>
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-zinc-400 px-6 text-center">
+        <p className="text-sm">
+          Competition <span className="font-mono text-zinc-300">{competitionSlug}</span>{" "}
+          isn&apos;t in the upcoming weekend fixture
+          {competitionsQuery.data?.gameWeek
+            ? ` (GW${competitionsQuery.data.gameWeek})`
+            : ""}
+          .
+        </p>
+        {first ? (
+          <Link
+            href={`/in-season/${first.slug}${helperQuery}`}
+            className="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1 px-3 py-1.5 rounded border border-amber-500/30 bg-amber-500/10"
+          >
+            Open {first.leagueName} ({first.mainRarityType}) instead
+          </Link>
+        ) : (
+          <p className="text-xs text-zinc-500">
+            No in-season competitions found in the upcoming fixtures.
+          </p>
+        )}
         <Link
           href="/in-season"
-          className="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1"
+          className="text-xs text-zinc-500 hover:text-zinc-300 inline-flex items-center gap-1"
         >
           <ChevronLeft className="w-3 h-3" /> Back to In Season
         </Link>
