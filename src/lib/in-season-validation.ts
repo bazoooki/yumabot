@@ -34,23 +34,9 @@ export function validateInSeasonLineup(
     }
   }
 
-  // A card is eligible for this comp iff its `eligibleUpcomingLeagueTracks`
-  // contains a track to a leaderboard matching this comp's rarity + league.
-  // This replaces the old `domesticLeague === comp.leagueName` + `inSeasonEligible`
-  // pair — both were stale/misleading (loanees, dual-eligible cards).
-  const isEligibleForComp = (card: InSeasonLineupSlot["card"]): boolean => {
-    if (!card) return false;
-    const tracks = card.eligibleUpcomingLeagueTracks ?? [];
-    return tracks.some(
-      (t) =>
-        t.entrySo5Leaderboard.mainRarityType === comp.mainRarityType &&
-        t.entrySo5Leaderboard.so5League.displayName === comp.leagueName,
-    );
-  };
-
   for (const slot of filledSlots) {
     const card = slot.card!;
-    if (!isEligibleForComp(card)) {
+    if (!isEligibleForCompetition(card, comp)) {
       messages.push({
         type: "error",
         text: `${card.anyPlayer?.displayName ?? "Card"} not eligible for ${comp.leagueName}`,
@@ -61,7 +47,9 @@ export function validateInSeasonLineup(
   // Min 4-of-5 rule is covered by the per-slot check above (each ineligible
   // card becomes an error). Keep a soft count warning while the lineup is
   // still being built.
-  const eligibleCount = filledSlots.filter((s) => isEligibleForComp(s.card)).length;
+  const eligibleCount = filledSlots.filter((s) =>
+    s.card ? isEligibleForCompetition(s.card, comp) : false,
+  ).length;
   const minRequired = 4;
   if (filledSlots.length < 5 && eligibleCount < minRequired) {
     const remaining = 5 - filledSlots.length;
