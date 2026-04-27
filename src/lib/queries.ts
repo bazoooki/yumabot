@@ -30,7 +30,9 @@ export const USER_CARDS_QUERY = gql`
               }
             }
           }
-          rawRecentSo5: rawSo5Scores(last: 5)
+          ... on Card {
+            rawRecentSo5: rawSo5Scores(last: 5)
+          }
           anyPlayer {
             slug
             displayName
