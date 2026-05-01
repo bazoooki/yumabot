@@ -9,49 +9,23 @@ import type {
   ScoredCardWithStrategy,
 } from "./types";
 import { recommendInSeasonLineup, scoreCardsForInSeason } from "./ai-lineup";
+import { isEligibleForCompetition } from "./in-season/eligibility";
 
-const CROSS_LEAGUE_KEYWORDS = ["challenger", "contender", "european", "global"];
-
-function isCrossLeague(comp: InSeasonCompetition): boolean {
-  return CROSS_LEAGUE_KEYWORDS.some((kw) =>
-    comp.leagueName.toLowerCase().includes(kw),
-  );
-}
-
-/** Filter cards eligible for a specific competition (mirrors useEligibleCards logic) */
+/**
+ * Filter cards eligible for a specific competition. Delegates to the shared
+ * `isEligibleForCompetition` so single-league + cross-league (Challenger /
+ * Contender via `so5LeaderboardType`) are handled uniformly. Also requires
+ * the player has an upcoming game so we don't suggest cards with no fixture.
+ */
 export function getEligibleCardsForCompetition(
   cards: SorareCard[],
   comp: InSeasonCompetition,
 ): SorareCard[] {
-  // Prefer precise league track eligibility when available
-  const compCross = isCrossLeague(comp);
-
-  return cards.filter((c) => {
-    if (c.rarityTyped !== comp.mainRarityType) return false;
-    if (!c.anyPlayer) return false;
-    if (!c.anyPlayer.activeClub?.upcomingGames?.length) return false;
-
-    // Use eligibleUpcomingLeagueTracks for precise matching
-    const tracks = c.eligibleUpcomingLeagueTracks;
-    if (tracks && tracks.length > 0) {
-      return tracks.some(
-        (t) =>
-          t.entrySo5Leaderboard.seasonality === "IN_SEASON" &&
-          t.entrySo5Leaderboard.mainRarityType === comp.mainRarityType &&
-          t.entrySo5Leaderboard.so5League.displayName
-            .toLowerCase()
-            .includes(comp.leagueName.toLowerCase().split(" ")[0]),
-      );
-    }
-
-    // Fallback: heuristic league-name matching
-    if (!compCross && comp.leagueName) {
-      const playerLeague = c.anyPlayer.activeClub?.domesticLeague?.name;
-      if (playerLeague && playerLeague !== comp.leagueName) return false;
-    }
-
-    return true;
-  });
+  return cards.filter(
+    (c) =>
+      isEligibleForCompetition(c, comp) &&
+      c.anyPlayer?.activeClub?.upcomingGames?.length,
+  );
 }
 
 /** Build bidirectional eligibility map between cards and competitions */
@@ -124,10 +98,7 @@ export async function planGameweek(
       const targetScore = comp.streak?.thresholds.find((t) => t.isCurrent)?.score ?? 360;
       const scored = scoreCardsForInSeason(
         [contested.card],
-        {
-          allowedRarities: [comp.mainRarityType],
-          leagueRestriction: isCrossLeague(comp) ? null : comp.leagueName,
-        },
+        comp,
         targetScore,
         null,
         playerIntel,
@@ -139,7 +110,6 @@ export async function planGameweek(
 
   // Greedy allocation pass
   for (const comp of sortedComps) {
-    const compCross = isCrossLeague(comp);
     const targetScore =
       comp.streak?.thresholds.find((t) => t.isCurrent)?.score ?? 360;
 
@@ -152,11 +122,7 @@ export async function planGameweek(
 
     const { lineup, warnings } = await recommendInSeasonLineup(
       cards,
-      {
-        allowedRarities: [comp.mainRarityType],
-        leagueRestriction: compCross ? null : comp.leagueName,
-        minInSeasonCards: 4,
-      },
+      comp,
       targetScore,
       playerIntel,
       usedSlugs,

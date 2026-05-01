@@ -3,11 +3,13 @@ import {
   mapThresholdToLevel,
   RISK_PROFILE_WEIGHTS,
   scoreCardsWithStrategy,
+  type StrategyWeights,
 } from "@/lib/ai-lineup";
 import { isCardEligibleFor } from "@/lib/in-season/eligibility";
 import { pickInSeasonLineup } from "@/lib/in-season/lineup-picker";
 import { nextTargetForEntry } from "@/lib/in-season/streak-target";
 import type {
+  PlayerGameScore,
   PlayerIntel,
   RarityType,
   ScoredCardWithStrategy,
@@ -19,6 +21,7 @@ import type {
   LineupCount,
 } from "@/lib/ai-suggestions-store";
 import type { SuggestedLineup } from "@/lib/in-season/build-suggested-competition";
+import type { FormulaWeights } from "@/lib/ai-suggestions/formula";
 
 /**
  * Resolve the target threshold given the user's requested level offset.
@@ -99,6 +102,20 @@ export interface GenerateInput {
   cards: SorareCard[];
   settings: AiSuggestionsSettings;
   playerIntel: Record<string, PlayerIntel> | null;
+  /**
+   * Optional per-row history (slug → recent games). When provided, fed
+   * through to `scoreCardsWithStrategy` so floor/ceiling/consistency/
+   * minutesDepth/setPieceBonus reflect real history.
+   */
+  playerHistory?: Record<string, PlayerGameScore[]> | null;
+  /**
+   * Custom weight bundle from the formula panel. When set, replaces the
+   * preset RISK_PROFILE_WEIGHTS for ALL strategy modes — the row collapses
+   * to a single lineup since safe/balanced/ceiling tabs no longer encode
+   * different weights. The caller should hide the strategy strip in this
+   * case.
+   */
+  formulaOverride?: FormulaWeights | null;
 }
 
 export interface GenerateOutput {
@@ -109,11 +126,25 @@ export interface GenerateOutput {
   warnings: string[];
 }
 
+function toStrategyWeights(w: FormulaWeights): StrategyWeights {
+  return {
+    expectedScore: w.expectedScore,
+    floor: w.floor,
+    ceiling: w.ceiling,
+    consistency: w.consistency,
+    startProb: w.startProb,
+    minutesDepth: w.minutesDepth,
+    setPieceTaker: w.setPieceTaker,
+  };
+}
+
 export function generateSuggestions({
   entry,
   cards,
   settings,
   playerIntel,
+  playerHistory,
+  formulaOverride,
 }: GenerateInput): GenerateOutput | null {
   const target = resolveTarget(entry, settings.targetLevelOffset);
 
@@ -142,20 +173,30 @@ export function generateSuggestions({
   }
 
   const level = mapThresholdToLevel(target.score);
-  const modes = modesForCount(settings.lineupCount);
+  // When the user has a custom formula, all three strategy presets would
+  // collapse to the same lineup — render a single "balanced" suggestion
+  // instead of three identical tabs.
+  const modes = formulaOverride
+    ? (["balanced"] as Array<"safe" | "balanced" | "ceiling">)
+    : modesForCount(settings.lineupCount);
   const suggestions: SuggestedLineup[] = [];
 
   for (const mode of modes) {
-    const weights = RISK_PROFILE_WEIGHTS[mode];
-    // `balanced` uses the level-keyed LEVEL_WEIGHTS via an undefined override;
-    // the sentinel in RISK_PROFILE_WEIGHTS.balanced is only for the popover UI.
-    const weightOverride = mode === "balanced" ? undefined : weights;
+    let weightOverride: StrategyWeights | undefined;
+    if (formulaOverride) {
+      weightOverride = toStrategyWeights(formulaOverride);
+    } else if (mode !== "balanced") {
+      // `balanced` falls back to the level-keyed LEVEL_WEIGHTS via undefined;
+      // safe/ceiling use their RISK_PROFILE_WEIGHTS bundle.
+      weightOverride = RISK_PROFILE_WEIGHTS[mode];
+    }
     const scored = scoreCardsWithStrategy(
       eligible,
       level,
       starterProbs,
       playerIntel,
       weightOverride,
+      playerHistory ?? null,
     );
     const selected = pickInSeasonLineup(scored);
     if (selected.length === 0) continue;

@@ -243,20 +243,11 @@ export const useInSeasonStore = create<InSeasonStore>((set, get) => ({
     set({ isAutoFilling: true, strategyResults: null, lineupProbability: null });
 
     try {
-      const crossLeagueKeywords = ["challenger", "contender", "european", "global"];
-      const isCrossLeague = crossLeagueKeywords.some((kw) =>
-        comp.leagueName.toLowerCase().includes(kw),
-      );
-
       const targetScore = state.targetThreshold?.score ?? 360;
 
       const { lineup, warnings, probability } = await recommendInSeasonLineup(
         cards,
-        {
-          allowedRarities: [comp.mainRarityType],
-          leagueRestriction: isCrossLeague ? null : comp.leagueName,
-          minInSeasonCards: 4,
-        },
+        comp,
         targetScore,
         state.cachedPlayerIntel,
         state.usedCardSlugs,

@@ -33,16 +33,6 @@ export function createInSeasonRecommendTools(
         );
         if (!comp) return "No competition selected. Select one from the sidebar first.";
 
-        const crossLeagueKeywords = [
-          "challenger",
-          "contender",
-          "european",
-          "global",
-        ];
-        const isCrossLeague = crossLeagueKeywords.some((kw) =>
-          comp.leagueName.toLowerCase().includes(kw),
-        );
-
         const targetScore =
           typeof input.targetScore === "number"
             ? input.targetScore
@@ -58,11 +48,7 @@ export function createInSeasonRecommendTools(
           const { lineup, warnings, probability } =
             await recommendInSeasonLineup(
               cards,
-              {
-                allowedRarities: [comp.mainRarityType],
-                leagueRestriction: isCrossLeague ? null : comp.leagueName,
-                minInSeasonCards: 4,
-              },
+              comp,
               targetScore,
               state.cachedPlayerIntel,
               state.usedCardSlugs,

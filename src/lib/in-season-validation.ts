@@ -1,5 +1,5 @@
 import type { InSeasonLineupSlot, InSeasonCompetition, PlayerIntel } from "./types";
-import { isEligibleForCompetition } from "./in-season/eligibility";
+import { isCardInSeason, isEligibleForCompetition } from "./in-season/eligibility";
 
 export interface ValidationMessage {
   type: "error" | "warning" | "info" | "success";
@@ -42,6 +42,19 @@ export function validateInSeasonLineup(
         text: `${card.anyPlayer?.displayName ?? "Card"} not eligible for ${comp.leagueName}`,
       });
     }
+  }
+
+  // Sorare rule: max 1 classic card per in-season lineup (i.e. min 4 in-season).
+  // Validates manually-built lineups; auto-pickers enforce the same rule via
+  // pickInSeasonLineup's classic budget. Counts classic cards on top of the
+  // per-slot eligibility check so a card that's both classic AND ineligible
+  // gets the more specific eligibility error rather than the count error.
+  const classicCount = filledSlots.filter((s) => !isCardInSeason(s.card!)).length;
+  if (classicCount > 1) {
+    messages.push({
+      type: "error",
+      text: `${classicCount} classic cards in lineup — max 1 allowed (need 4 in-season)`,
+    });
   }
 
   // Min 4-of-5 rule is covered by the per-slot check above (each ineligible

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { SorareCard } from "@/lib/types";
-import { usePlayerIntel } from "@/lib/hooks";
+import { usePlayerHistory, usePlayerIntel } from "@/lib/hooks";
 import { isCardEligibleFor } from "@/lib/in-season/eligibility";
 import { useAiSuggestionsStore } from "@/lib/ai-suggestions-store";
 import { generateSuggestions } from "@/lib/ai-suggestions/generate";
@@ -13,6 +13,13 @@ import {
   StrategyTabStrip,
   type StrategyMode,
 } from "@/components/ai/strategy-tab-strip";
+import {
+  isModified,
+  needsHistory,
+  presetFormula,
+  type FormulaConfig,
+} from "@/lib/ai-suggestions/formula";
+import { FormulaPanel } from "./formula-panel";
 import type { HotStreakEntry } from "./use-hot-streak-entries";
 import { AISuggestionLoader } from "./ai-suggestion-loader";
 import { TrendingUp, AlertTriangle } from "lucide-react";
@@ -54,6 +61,24 @@ export function AISuggestionRow({
     eligibleCards.length > 0 && playerIntelData === undefined;
   const settings = useAiSuggestionsStore();
 
+  // Formula override — staged by the FormulaPanel, applied here. `null`
+  // means "use preset risk-profile weights" (current behavior). Local row
+  // state for now; persistence is deferred (see earlier discussion on
+  // caching/persistence layer).
+  const [appliedFormula, setAppliedFormula] = useState<FormulaConfig | null>(
+    null,
+  );
+
+  // Lazy-fetch raw player history when an applied formula needs it. Only
+  // gets enabled once the user explicitly clicks Regenerate with a
+  // history-dependent ingredient on — never speculatively.
+  const historyEnabled =
+    !!appliedFormula && needsHistory(appliedFormula.weights);
+  const playerHistoryData = usePlayerHistory(eligibleCards, historyEnabled);
+  const playerHistory = playerHistoryData ?? null;
+  const isHistoryLoading =
+    historyEnabled && eligibleCards.length > 0 && playerHistoryData === undefined;
+
   const result = useMemo(
     () =>
       generateSuggestions({
@@ -66,11 +91,15 @@ export function AISuggestionRow({
           showClaudeTake: settings.showClaudeTake,
         },
         playerIntel,
+        playerHistory,
+        formulaOverride: appliedFormula?.weights ?? null,
       }),
     [
       entry,
       cards,
       playerIntel,
+      playerHistory,
+      appliedFormula,
       settings.targetLevelOffset,
       settings.lineupCount,
       settings.excludeDoubtful,
@@ -161,6 +190,19 @@ export function AISuggestionRow({
         </div>
       ))}
 
+      <FormulaPanel
+        applied={appliedFormula ?? presetFormula(selectedStrategy)}
+        basePreset={selectedStrategy}
+        historyLoading={isHistoryLoading}
+        historyMissing={historyEnabled && !playerHistory}
+        onApply={(next) => {
+          // Snap to preset means clear the override (lets the strategy
+          // tabs reactivate); otherwise persist the custom config.
+          setAppliedFormula(isModified(next) ? next : null);
+        }}
+        onReset={() => setAppliedFormula(null)}
+      />
+
       {suggestions.length === 0 ? (
         <p className="text-[11px] text-zinc-500 text-center py-4">
           Not enough eligible cards to build a lineup. Try disabling
@@ -168,11 +210,17 @@ export function AISuggestionRow({
         </p>
       ) : (
         <>
-          <StrategyTabStrip
-            active={activeStrategy}
-            available={availableStrategies}
-            onChange={setSelectedStrategy}
-          />
+          {/* Strategy strip is hidden when a custom formula is applied —
+              all three preset modes would collapse to the same lineup, so
+              the tabs stop encoding meaningful choices. The formula panel
+              IS the strategy in that mode. */}
+          {!appliedFormula && (
+            <StrategyTabStrip
+              active={activeStrategy}
+              available={availableStrategies}
+              onChange={setSelectedStrategy}
+            />
+          )}
 
           {/* Big stats card */}
           {activeEntry && activeStrategy && (

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { SorareCard, PlayerIntel, LivePlayerScore } from "./types";
+import type { SorareCard, PlayerIntel, LivePlayerScore, PlayerGameScore } from "./types";
 import { useLineupStore } from "./lineup-store";
 
 async function fetchPlayerIntelBatch(
@@ -225,6 +225,76 @@ export function usePlayerForm(
     },
     staleTime: 10 * 60 * 1000,
     enabled: allSlugs.slugs.length > 0,
+  });
+
+  return data;
+}
+
+// --- Player History Hook (raw per-game scores) ---
+//
+// Used by the home AI panel's formula override when ingredients that need
+// real history are enabled (floor / ceiling / consistency / minutesDepth /
+// setPieceTaker). Distinct from `usePlayerForm` — that hook returns
+// pre-aggregated form metrics, while this returns the raw PlayerGameScore[]
+// so the scoring engine can derive minsPlayed / setPieceTaken / penaltyTaken
+// itself.
+
+async function fetchPlayerHistoryBatch(
+  slugs: string[],
+  positions: string[],
+): Promise<Record<string, PlayerGameScore[]>> {
+  if (slugs.length === 0) return {};
+  const res = await fetch(
+    `/api/player-scores?slugs=${slugs.join(",")}&positions=${positions.join(",")}&history=1`,
+  );
+  if (!res.ok) return {};
+  const data = await res.json();
+  return (data.players ?? {}) as Record<string, PlayerGameScore[]>;
+}
+
+export function usePlayerHistory(
+  cards: SorareCard[],
+  enabled: boolean,
+): Record<string, PlayerGameScore[]> | undefined {
+  const { slugs, positions, key } = useMemo(() => {
+    const seen = new Set<string>();
+    const s: string[] = [];
+    const p: string[] = [];
+    for (const card of cards) {
+      const player = card.anyPlayer;
+      if (!player || seen.has(player.slug)) continue;
+      seen.add(player.slug);
+      s.push(player.slug);
+      p.push(player.cardPositions?.[0] || "Forward");
+    }
+    const pairs = s.map((slug, i) => ({ slug, pos: p[i] }));
+    pairs.sort((a, b) => a.slug.localeCompare(b.slug));
+    return {
+      slugs: pairs.map((x) => x.slug),
+      positions: pairs.map((x) => x.pos),
+      key: pairs.map((x) => `${x.slug}:${x.pos}`).join(","),
+    };
+  }, [cards]);
+
+  const { data } = useQuery({
+    queryKey: ["player-history", key],
+    queryFn: async () => {
+      const merged: Record<string, PlayerGameScore[]> = {};
+      // Sequential 15-slug chunks — same gating reasoning as usePlayerIntel
+      // (Sorare federation rejects aliased `anyPlayer`, so the server fans
+      // out per-slug; sequential chunking keeps the global concurrency gate
+      // from queueing too deeply).
+      for (let i = 0; i < slugs.length; i += 15) {
+        const slugChunk = slugs.slice(i, i + 15);
+        const posChunk = positions.slice(i, i + 15);
+        const r = await fetchPlayerHistoryBatch(slugChunk, posChunk);
+        Object.assign(merged, r);
+      }
+      return merged;
+    },
+    // History only changes when a game ends — 30 min is plenty.
+    staleTime: 30 * 60 * 1000,
+    enabled: enabled && slugs.length > 0,
   });
 
   return data;

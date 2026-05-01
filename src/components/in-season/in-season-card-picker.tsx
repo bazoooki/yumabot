@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { usePlayerIntel } from "@/lib/hooks";
 import { useInSeasonStore, useSelectedCompetition, useEligibleCards } from "@/lib/in-season-store";
 import { scoreCardsWithStrategy } from "@/lib/ai-lineup";
+import { isCardInSeason } from "@/lib/in-season/eligibility";
+import { MAX_CLASSIC_CARDS } from "@/lib/in-season/lineup-picker";
 import { GridCard } from "@/components/lineup-builder/grid-card";
 import { SLOT_TO_POSITION } from "@/lib/normalization";
 import type { SorareCard, ScoredCardWithStrategy } from "@/lib/types";
@@ -44,6 +46,16 @@ export function InSeasonCardPicker({ cards }: { cards: SorareCard[] }) {
   // Cards already in lineup (disable in picker)
   const lineupSlugs = useMemo(
     () => new Set(slots.filter((s) => s.card).map((s) => s.card!.slug)),
+    [slots],
+  );
+
+  // Sorare rule: max 1 classic per in-season lineup. Once the budget is spent
+  // we soft-block remaining classic cards in the picker so the user can see
+  // the option (with a hint) but can't accidentally build an illegal lineup.
+  const classicBudgetSpent = useMemo(
+    () =>
+      slots.filter((s) => s.card && !isCardInSeason(s.card)).length >=
+      MAX_CLASSIC_CARDS,
     [slots],
   );
 
@@ -111,6 +123,7 @@ export function InSeasonCardPicker({ cards }: { cards: SorareCard[] }) {
 
   function handleCardClick(card: SorareCard) {
     if (lineupSlugs.has(card.slug)) return;
+    if (!isCardInSeason(card) && classicBudgetSpent) return;
 
     if (selectedSlotIndex !== null && !slots[selectedSlotIndex].card) {
       addCard(selectedSlotIndex, card);
@@ -182,16 +195,21 @@ export function InSeasonCardPicker({ cards }: { cards: SorareCard[] }) {
             {filteredCards.map((sc: ScoredCardWithStrategy) => {
               const playerSlug = sc.card.anyPlayer?.slug;
               const intel = playerSlug && playerIntel ? playerIntel[playerSlug] : undefined;
-              const isInSeason = sc.card.inSeasonEligible;
+              const isInSeason = isCardInSeason(sc.card);
+              const classicLocked = !isInSeason && classicBudgetSpent && !lineupSlugs.has(sc.card.slug);
 
               return (
-                <div key={sc.card.slug} className="relative">
+                <div
+                  key={sc.card.slug}
+                  className="relative"
+                  title={classicLocked ? "Lineup already has 1 classic card (max allowed)" : undefined}
+                >
                   <GridCard
                     card={sc.card}
                     strategy={sc.strategy}
                     starterProbability={intel?.starterProbability}
                     playerIntel={intel}
-                    disabled={lineupSlugs.has(sc.card.slug)}
+                    disabled={lineupSlugs.has(sc.card.slug) || classicLocked}
                     onClick={() => handleCardClick(sc.card)}
                   />
                   {/* In-season badge */}

@@ -28,10 +28,7 @@ import {
   validateInSeasonLineup,
   type ValidationResult,
 } from "@/lib/in-season-validation";
-import {
-  isCrossLeagueCompetition,
-  isEligibleForCompetition,
-} from "@/lib/in-season/eligibility";
+import { isEligibleForCompetition } from "@/lib/in-season/eligibility";
 import { usePlayerIntel } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { TONE, TEAM_TONES } from "./tones";
@@ -134,14 +131,9 @@ export function TeamColumn({
           if (slug) usedInOthers.add(slug);
         }
       }
-      const isCrossLeague = isCrossLeagueCompetition(competition.leagueName);
       const { lineup } = await recommendInSeasonLineup(
         galleryCards,
-        {
-          allowedRarities: [competition.mainRarityType],
-          leagueRestriction: isCrossLeague ? null : competition.leagueName,
-          minInSeasonCards: 4,
-        },
+        competition,
         target,
         playerIntel ?? null,
         usedInOthers,

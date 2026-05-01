@@ -226,6 +226,8 @@ export interface PlayerGameScore {
       reliability: string;
     } | null;
     minsPlayed: number;
+    setPieceTaken: number;
+    penaltyTaken: number;
   } | null;
 }
 
@@ -253,6 +255,10 @@ export interface CardStrategyMetrics {
   stdDev: number;
   consistencyScore: number;
   startProbability: number;
+  /** 0-100. Avg minsPlayed across recent appearances divided by 90. */
+  minutesDepth: number;
+  /** 0-100. Whether the player regularly takes set-pieces / penalties. */
+  setPieceBonus: number;
   strategyTag: StrategyTag;
   strategyReason: string;
   isDetailedTier: boolean;

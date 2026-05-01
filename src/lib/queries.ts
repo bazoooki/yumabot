@@ -118,6 +118,8 @@ export const PLAYER_SCORES_QUERY = gql`
                 reliability
               }
               minsPlayed
+              setPieceTaken
+              penaltyTaken
             }
           }
         }

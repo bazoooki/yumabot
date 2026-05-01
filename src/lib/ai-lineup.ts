@@ -8,8 +8,10 @@ import type {
   LineupProbability,
   PlayerGameScore,
   PlayerIntel,
+  InSeasonCompetition,
 } from "./types";
 import { pickInSeasonLineup } from "./in-season/lineup-picker";
+import { isEligibleForCompetition } from "./in-season/eligibility";
 
 export interface ScoredCard {
   card: SorareCard;
@@ -164,6 +166,17 @@ export interface StrategyWeights {
   ceiling: number;
   consistency: number;
   startProb: number;
+  /**
+   * 0-1 weight on `minutesDepth` — boosts cards whose recent appearances
+   * trend toward full 90s vs early subs. Optional so legacy callers and
+   * preset bundles keep their existing five-term shape; defaults to 0.
+   */
+  minutesDepth?: number;
+  /**
+   * 0-1 weight on `setPieceBonus` — flat boost when the player regularly
+   * takes set-pieces / penalties. Optional, defaults to 0.
+   */
+  setPieceTaker?: number;
 }
 
 /**
@@ -217,6 +230,12 @@ export function computeStrategyMetrics(
   startProbability?: number | null,
   projectionGrade?: string | null,
   projectedScore?: number | null,
+  /**
+   * Full per-game history. When provided, used to derive `minutesDepth` and
+   * `setPieceBonus`. Pass alongside `scoreHistory` when richer data is on
+   * hand — both are sourced from the same `/api/player-scores` payload.
+   */
+  gameHistory?: PlayerGameScore[] | null,
 ): CardStrategyMetrics {
   const player = card.anyPlayer;
   const avgScore = player?.averageScore || 0;
@@ -306,6 +325,49 @@ export function computeStrategyMetrics(
     strategyReason = `Solid pick — moderate variance${gradeLabel}`;
   }
 
+  // Minutes-played depth — among games where the player actually appeared,
+  // average minsPlayed. Cards whose recent appearances trend toward full 90s
+  // get a higher score than ones routinely subbed at 60'. Filtering on
+  // `minsPlayed > 0` keeps benched/squad-not-named games from dragging the
+  // mean toward zero (those signals are already captured by start
+  // probability — minutesDepth is specifically about how *deep* they play
+  // when they DO start). Falls back to 0 when no history is available.
+  let minutesDepth = 0;
+  if (gameHistory && gameHistory.length > 0) {
+    const appearances = gameHistory
+      .map((g) => g.anyPlayerGameStats?.minsPlayed ?? 0)
+      .filter((m) => m > 0);
+    if (appearances.length > 0) {
+      const avgMins = appearances.reduce((a, b) => a + b, 0) / appearances.length;
+      minutesDepth = Math.max(0, Math.min(100, Math.round((avgMins / 90) * 100)));
+    }
+  }
+
+  // Set-piece / penalty taker — flat 0/100 indicator. We treat the player as
+  // a regular taker if either avg setPieces taken per appearance ≥ 0.5
+  // (corner / FK duty most games) or any penalty has been taken in recent
+  // history (penalty kicks are rare events; one is enough signal).
+  let setPieceBonus = 0;
+  if (gameHistory && gameHistory.length > 0) {
+    const appearances = gameHistory.filter(
+      (g) => (g.anyPlayerGameStats?.minsPlayed ?? 0) > 0,
+    );
+    if (appearances.length > 0) {
+      const avgSetPieces =
+        appearances.reduce(
+          (s, g) => s + (g.anyPlayerGameStats?.setPieceTaken ?? 0),
+          0,
+        ) / appearances.length;
+      const totalPenalties = appearances.reduce(
+        (s, g) => s + (g.anyPlayerGameStats?.penaltyTaken ?? 0),
+        0,
+      );
+      if (avgSetPieces >= 0.5 || totalPenalties > 0) {
+        setPieceBonus = 100;
+      }
+    }
+  }
+
   return {
     expectedScore,
     floor,
@@ -313,6 +375,8 @@ export function computeStrategyMetrics(
     stdDev,
     consistencyScore,
     startProbability: startProb,
+    minutesDepth,
+    setPieceBonus,
     strategyTag,
     strategyReason,
     isDetailedTier: isDetailed,
@@ -337,7 +401,9 @@ export function computeStrategyScore(
     weights.floor * normalizedFloor +
     weights.ceiling * normalizedCeiling +
     weights.consistency * normalizedConsistency +
-    weights.startProb * normalizedStartProb;
+    weights.startProb * normalizedStartProb +
+    (weights.minutesDepth ?? 0) * metrics.minutesDepth +
+    (weights.setPieceTaker ?? 0) * metrics.setPieceBonus;
 
   // Non-starter penalty — aggressive to avoid picking players who won't play
   if (metrics.startProbability < 0.5) {
@@ -354,18 +420,36 @@ export function scoreCardsWithStrategy(
   starterProbs?: Record<string, number | null> | null,
   playerIntelMap?: Record<string, PlayerIntel> | null,
   weightOverride?: StrategyWeights,
+  /**
+   * Optional per-player history map. When provided, history is fed into
+   * `computeStrategyMetrics` so floor/ceiling, consistency, minutesDepth,
+   * and setPieceBonus reflect real recent games rather than position
+   * defaults.
+   */
+  historyMap?: Record<string, PlayerGameScore[]> | null,
 ): ScoredCardWithStrategy[] {
-  console.log("[SCORE] scoreCardsWithStrategy called with starterProbs:", starterProbs ? Object.keys(starterProbs).length + " players" : "NONE", "playerIntelMap:", playerIntelMap ? Object.keys(playerIntelMap).length + " players" : "NONE");
+  console.log("[SCORE] scoreCardsWithStrategy called with starterProbs:", starterProbs ? Object.keys(starterProbs).length + " players" : "NONE", "playerIntelMap:", playerIntelMap ? Object.keys(playerIntelMap).length + " players" : "NONE", "historyMap:", historyMap ? Object.keys(historyMap).length + " players" : "NONE");
   return cards
     .map((card) => {
       const playerSlug = card.anyPlayer?.slug;
       const intel = playerSlug ? playerIntelMap?.[playerSlug] : undefined;
+      const history = playerSlug ? historyMap?.[playerSlug] : undefined;
       const base = getExpectedPoints(card, intel?.fieldStatus);
       // Use real starter probability if available (value is 0-100 from batch fetch)
       const realProb = playerSlug && starterProbs?.[playerSlug] != null
         ? starterProbs[playerSlug]! / 100
         : undefined;
-      const strategy = computeStrategyMetrics(card, null, realProb ?? null, intel?.projectionGrade, intel?.projectedScore);
+      const scoreValues = history
+        ? history.filter((g) => g.score > 0).map((g) => g.score)
+        : null;
+      const strategy = computeStrategyMetrics(
+        card,
+        scoreValues,
+        realProb ?? null,
+        intel?.projectionGrade,
+        intel?.projectedScore,
+        history ?? null,
+      );
       // Force RISKY for unavailable players
       if (base.isInjured) {
         strategy.strategyTag = "RISKY";
@@ -631,47 +715,50 @@ export function mapThresholdToLevel(thresholdScore: number): number {
   return 6;
 }
 
-/** Score cards filtered for in-season competition rules */
+/**
+ * Score cards filtered for in-season competition rules. Uses
+ * `isEligibleForCompetition` (the SoT walking `eligibleUpcomingLeagueTracks`)
+ * for filtering — covers rarity, league, seasonality, classic-vs-in-season
+ * tracks, and Challenger/Contender via `so5LeaderboardType` in one check.
+ *
+ * Do NOT inline a `domesticLeague.name` filter here — it misses loanees and
+ * dual-eligible cards. The whole point of routing through the comp is that
+ * Sorare's per-card track list is authoritative.
+ */
 export function scoreCardsForInSeason(
   cards: SorareCard[],
-  requirements: {
-    allowedRarities: string[];
-    leagueRestriction: string | null;
-  },
+  comp: InSeasonCompetition,
   targetScore: number,
   starterProbs?: Record<string, number | null> | null,
   playerIntelMap?: Record<string, PlayerIntel> | null,
 ): ScoredCardWithStrategy[] {
-  // Filter by rarity
-  let eligible = cards.filter((c) =>
-    requirements.allowedRarities.includes(c.rarityTyped),
-  );
-
-  // Filter by league (skip for cross-league)
-  if (requirements.leagueRestriction) {
-    eligible = eligible.filter(
-      (c) =>
-        c.anyPlayer?.activeClub?.domesticLeague?.name ===
-        requirements.leagueRestriction,
-    );
-  }
-
+  const eligible = cards.filter((c) => isEligibleForCompetition(c, comp));
   const level = mapThresholdToLevel(targetScore);
   return scoreCardsWithStrategy(eligible, level, starterProbs, playerIntelMap);
 }
 
-/** Recommend best 5 for in-season with validation */
+/**
+ * Recommend best 5 cards for an in-season competition.
+ *
+ * Takes the full `InSeasonCompetition` rather than a derived `requirements`
+ * blob so callers don't pre-compute league restrictions or cross-league
+ * flags — all of that is encoded in the comp itself (`so5LeaderboardType`,
+ * `leagueName`, `mainRarityType`, `seasonality`). The shared eligibility
+ * helper handles every case (single-league + Challenger/Contender) uniformly.
+ *
+ * Sorare's hard rule: min 4 of 5 cards must be in-season (max 1 classic).
+ * `pickInSeasonLineup` enforces this via a classic budget; we still emit a
+ * warning if the available pool can't satisfy it (e.g. user owns < 4
+ * in-season cards in this league).
+ */
 export async function recommendInSeasonLineup(
   cards: SorareCard[],
-  requirements: {
-    allowedRarities: string[];
-    leagueRestriction: string | null;
-    minInSeasonCards: number;
-  },
+  comp: InSeasonCompetition,
   targetScore: number,
   playerIntelMap?: Record<string, PlayerIntel> | null,
   usedCardSlugs?: Set<string>,
 ): Promise<{ lineup: ScoredCardWithStrategy[]; warnings: string[]; probability: LineupProbability }> {
+  const MIN_IN_SEASON = 4;
   const starterProbs: Record<string, number | null> | undefined = playerIntelMap
     ? Object.fromEntries(
         Object.entries(playerIntelMap).map(([slug, intel]) => [
@@ -683,7 +770,7 @@ export async function recommendInSeasonLineup(
 
   const scored = scoreCardsForInSeason(
     cards,
-    requirements,
+    comp,
     targetScore,
     starterProbs,
     playerIntelMap,
@@ -737,9 +824,9 @@ export async function recommendInSeasonLineup(
   const inSeasonCount = selected.filter(
     (sc) => sc.card.inSeasonEligible,
   ).length;
-  if (inSeasonCount < requirements.minInSeasonCards) {
+  if (inSeasonCount < MIN_IN_SEASON) {
     warnings.push(
-      `Only ${inSeasonCount}/${requirements.minInSeasonCards} in-season eligible cards available`,
+      `Only ${inSeasonCount}/${MIN_IN_SEASON} in-season eligible cards available`,
     );
   }
 

@@ -3,6 +3,15 @@ import { sorareClient } from "@/lib/sorare-client";
 import { PLAYER_SCORES_QUERY, PLAYER_STARTER_ODDS_QUERY } from "@/lib/queries";
 import type { PlayerGameScore } from "@/lib/types";
 
+interface BatchHistoryResponse {
+  anyPlayer: {
+    slug: string;
+    allPlayerGameScores: {
+      nodes: PlayerGameScore[];
+    };
+  } | null;
+}
+
 interface PlayerScoresResponse {
   anyPlayer: {
     slug: string;
@@ -49,6 +58,40 @@ export async function GET(request: Request) {
   const slug = searchParams.get("slug");
   const slugs = searchParams.get("slugs");
   const position = searchParams.get("position") || "Goalkeeper";
+
+  const history = searchParams.get("history") === "1";
+  const positions = searchParams.get("positions");
+
+  // Batch history mode: ?slugs=a,b,c&positions=Forward,Midfielder&history=1
+  // Returns raw recent PlayerGameScore[] per slug (NOT aggregated form).
+  // Used by the home AI panel's formula override when minutesDepth or
+  // setPieceTaker ingredients are enabled — those need per-game minsPlayed,
+  // setPieceTaken, penaltyTaken which the form endpoint doesn't expose.
+  if (slugs && history) {
+    const slugList = slugs.split(",").slice(0, 15);
+    const posList = positions ? positions.split(",") : [];
+
+    const results = await Promise.allSettled(
+      slugList.map(async (s, i) => {
+        const pos = posList[i] || "Goalkeeper";
+        const result = await sorareClient.request<BatchHistoryResponse>(
+          PLAYER_SCORES_QUERY,
+          { slug: s, position: pos },
+        );
+        const nodes = result?.anyPlayer?.allPlayerGameScores?.nodes ?? [];
+        return { slug: s, scores: nodes };
+      }),
+    );
+
+    const players: Record<string, PlayerGameScore[]> = {};
+    for (const r of results) {
+      if (r.status === "fulfilled") {
+        players[r.value.slug] = r.value.scores;
+      }
+    }
+
+    return NextResponse.json({ players });
+  }
 
   // Batch mode: ?slugs=a,b,c — fetch upcoming game starter odds.
   // Sorare's federation gateway rejects aliased duplicate root fields
