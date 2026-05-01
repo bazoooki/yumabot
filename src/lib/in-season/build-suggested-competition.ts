@@ -87,6 +87,7 @@ export function buildSuggestedCompetition(input: BuildInput): InSeasonCompetitio
     leagueName: input.leagueName,
     leagueSlug: "",
     seasonality: "IN_SEASON",
+    so5LeaderboardType: null,
     mainRarityType: input.mainRarityType,
     division: 0,
     teamsCap: teams.length,
