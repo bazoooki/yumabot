@@ -25,9 +25,13 @@ export function isCrossLeagueCompetition(leagueName: string): boolean {
  * Whether a card is eligible to enter the given in-season competition.
  *
  * Authoritative rule: walk `eligibleUpcomingLeagueTracks` and look for a
- * matching `(mainRarityType, so5League.displayName)`. Do NOT fall back to
- * `inSeasonEligible` or `activeClub.domesticLeague` — both are stale and
- * miss loanees / dual-eligible cards.
+ * matching `(seasonality, mainRarityType, so5League.displayName)`. The
+ * seasonality match is critical — the same player can have both an IN_SEASON
+ * track (newest-season card) and a CLASSIC track (older-season card), and
+ * without the seasonality filter classic cards leak into the in-season pool.
+ *
+ * Do NOT fall back to `inSeasonEligible` or `activeClub.domesticLeague`
+ * for league matching — both miss loanees / dual-eligible cards.
  */
 export function isEligibleForCompetition(
   card: SorareCard,
@@ -38,14 +42,20 @@ export function isEligibleForCompetition(
   const tracks = card.eligibleUpcomingLeagueTracks ?? [];
   if (tracks.length === 0) return false;
 
+  const matchesSeasonality = (t: { entrySo5Leaderboard: { seasonality: string } }) =>
+    t.entrySo5Leaderboard.seasonality === comp.seasonality;
+
   if (isCrossLeagueCompetition(comp.leagueName)) {
     return tracks.some(
-      (t) => t.entrySo5Leaderboard.mainRarityType === comp.mainRarityType,
+      (t) =>
+        matchesSeasonality(t) &&
+        t.entrySo5Leaderboard.mainRarityType === comp.mainRarityType,
     );
   }
 
   return tracks.some(
     (t) =>
+      matchesSeasonality(t) &&
       t.entrySo5Leaderboard.mainRarityType === comp.mainRarityType &&
       t.entrySo5Leaderboard.so5League.displayName === comp.leagueName,
   );

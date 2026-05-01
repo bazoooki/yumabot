@@ -15,5 +15,5 @@ export default function InSeasonPage() {
       </div>
     );
   }
-  return <InSeasonWorkspace forUserSlug={userSlug} leagueSlug={null} />;
+  return <InSeasonWorkspace forUserSlug={userSlug} />;
 }

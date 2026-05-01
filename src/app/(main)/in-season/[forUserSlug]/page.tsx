@@ -9,5 +9,5 @@ export default function Page({
   params: Promise<{ forUserSlug: string }>;
 }) {
   const { forUserSlug } = use(params);
-  return <InSeasonWorkspace forUserSlug={forUserSlug} leagueSlug={null} />;
+  return <InSeasonWorkspace forUserSlug={forUserSlug} />;
 }

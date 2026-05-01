@@ -96,22 +96,22 @@ export function CardPoolRow({
         <GripVertical className="w-3 h-3 text-zinc-600 shrink-0" />
         <div className="relative shrink-0">
           <div className="w-9 h-12 rounded-md border border-zinc-700/80 bg-zinc-800 overflow-hidden">
-            {card.pictureUrl ? (
-              <Image
-                src={card.pictureUrl}
-                alt={player.displayName}
-                width={36}
-                height={48}
-                className="object-cover object-[center_18%] w-full h-full scale-150"
-                sizes="36px"
-              />
-            ) : player.avatarPictureUrl ? (
+            {player.avatarPictureUrl ? (
               <Image
                 src={player.avatarPictureUrl}
                 alt={player.displayName}
                 width={36}
                 height={48}
-                className="object-cover w-full h-full"
+                className="object-cover object-top w-full h-full"
+                sizes="36px"
+              />
+            ) : card.pictureUrl ? (
+              <Image
+                src={card.pictureUrl}
+                alt={player.displayName}
+                width={36}
+                height={48}
+                className="object-cover object-[center_22%] w-full h-full scale-[1.35]"
                 sizes="36px"
               />
             ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useCards } from "@/providers/cards-provider";
 import { useWorkspaceStore } from "@/lib/in-season/workspace-store";
@@ -114,19 +114,19 @@ function countFilledTeams(payload: DraftPayload | undefined): number {
 
 interface InSeasonWorkspaceProps {
   forUserSlug: string;
-  /** Optional — when null, the workspace defaults to the first league of the
-   *  active fixture. Driven by the URL path. */
-  leagueSlug: string | null;
 }
 
 export function InSeasonWorkspace({
   forUserSlug,
-  leagueSlug,
 }: InSeasonWorkspaceProps) {
   const { userSlug: currentUserSlug, cards: ownCards } = useCards();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const gwParam = searchParams.get("gw");
+  // League selection lives in the query string so switches don't remount the
+  // page or trigger Next.js dev-mode route recompilation. Updates go through
+  // `window.history.pushState` (see handleSelectLeague below) which integrates
+  // with `useSearchParams` per the Next.js Native History API guidance.
+  const leagueSlug = searchParams.get("league");
 
   // The logged-in user owns the draft row; `forUserSlug` is who the draft is
   // built FOR (self or clan member).
@@ -272,20 +272,27 @@ export function InSeasonWorkspace({
 
   const buildPath = useCallback(
     (targetLeagueSlug: string | null, gw: number | null) => {
-      const base = targetLeagueSlug
-        ? `/in-season/${forUserSlug}/${targetLeagueSlug}`
-        : `/in-season/${forUserSlug}`;
-      const qs = gw != null ? `?gw=${gw}` : "";
-      return base + qs;
+      const params = new URLSearchParams();
+      if (targetLeagueSlug) params.set("league", targetLeagueSlug);
+      if (gw != null) params.set("gw", String(gw));
+      const qs = params.toString();
+      return `/in-season/${forUserSlug}${qs ? `?${qs}` : ""}`;
     },
     [forUserSlug],
   );
 
   const handleSelectLeague = useCallback(
     (nextLeagueSlug: string) => {
-      router.push(buildPath(nextLeagueSlug, activeFixture?.gameWeek ?? null));
+      // Use the native History API to update the URL without triggering a
+      // Next.js navigation — `useSearchParams` picks up the change and the
+      // page re-renders with the new league, but no route compile / remount.
+      window.history.pushState(
+        null,
+        "",
+        buildPath(nextLeagueSlug, activeFixture?.gameWeek ?? null),
+      );
     },
-    [router, buildPath, activeFixture?.gameWeek],
+    [buildPath, activeFixture?.gameWeek],
   );
 
   const handleSelectFixture = useCallback(
@@ -298,9 +305,13 @@ export function InSeasonWorkspace({
         leagueSlug && target.competitions.some((c) => c.leagueSlug === leagueSlug)
           ? leagueSlug
           : (target.competitions[0]?.leagueSlug ?? null);
-      router.replace(buildPath(stillThere, target.gameWeek));
+      window.history.replaceState(
+        null,
+        "",
+        buildPath(stillThere, target.gameWeek),
+      );
     },
-    [fixtures, leagueSlug, router, buildPath],
+    [fixtures, leagueSlug, buildPath],
   );
 
   const stripFixtures: GwStripFixture[] = useMemo(
