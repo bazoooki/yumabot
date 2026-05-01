@@ -67,19 +67,47 @@ async function fetchPlayedTracks(
   return (await res.json()) as PlayedTracksResponse;
 }
 
-interface UseHotStreakEntriesResult {
+interface OpenLineupsResponse {
+  fixtureSlug: string;
+  gameWeek: number;
+  endDate: string;
+  aasmState: string;
+  competitions: InSeasonCompetition[];
+}
+
+/**
+ * Fetch the user's existing lineups for an arbitrary fixture (typically the
+ * UPCOMING one). Backed by `IN_SEASON_BY_FIXTURE_QUERY`, which returns the
+ * same `userFixtureResults` shape as the LIVE query but for any fixture
+ * slug — exactly what we need between GWs when LIVE is empty/stale.
+ */
+async function fetchOpenLineups(
+  userSlug: string,
+  fixtureSlug: string,
+): Promise<OpenLineupsResponse | null> {
+  const res = await fetch(
+    `/api/in-season/competitions?userSlug=${encodeURIComponent(userSlug)}&fixtureSlug=${encodeURIComponent(fixtureSlug)}&seasonality=all`,
+  );
+  if (!res.ok) return null;
+  return (await res.json()) as OpenLineupsResponse;
+}
+
+interface StreakEntriesResult {
   entries: HotStreakEntry[];
   gameWeek: number | undefined;
   loading: boolean;
 }
 
+// ─── LIVE mode — drives the "My Hot Streaks" panel (current GW) ───
+
 /**
- * Merge LIVE in-season competitions, upcoming in-season metadata, and the
- * user's recent played-tracks history into a single per-(league, rarity) list.
- * Consumed by both HotStreaksPanel and AISuggestionsPanel so they show the
- * same set of competitions.
+ * Build entries for the gameweek currently being played. Source of truth is
+ * the user's LIVE in-season competitions plus their lineups in the open
+ * upcoming fixture (LIVE wins on conflict, OPEN fills gaps for the
+ * between-GW state). We do NOT seed from played-tracks here — see the
+ * comment in the merge block.
  */
-export function useHotStreakEntries({
+export function useLiveStreakEntries({
   liveCompetitions,
   liveLoading,
   liveGameWeek,
@@ -89,7 +117,13 @@ export function useHotStreakEntries({
   liveLoading: boolean;
   liveGameWeek: number | undefined;
   userSlug: string;
-}): UseHotStreakEntriesResult {
+}): StreakEntriesResult {
+  // Sorare's `?type=LIVE` returns the *currently-playing* fixture. Between
+  // gameweeks (after a GW closes and before the next kicks off) it has no
+  // games scheduled, so it returns the previously-closed fixture — which
+  // typically does NOT contain the lineups the user just submitted for the
+  // upcoming GW. Pull those via the upcoming-fixture slug from my-streaks
+  // and merge below so the panel reflects the manager's current state.
   const { data: myStreaksData, isLoading: myStreaksLoading } = useQuery({
     queryKey: ["in-season-my-streaks"],
     queryFn: fetchMyStreaks,
@@ -97,46 +131,23 @@ export function useHotStreakEntries({
     refetchInterval: 5 * 60 * 1000,
   });
 
-  const { data: playedTracksData, isLoading: playedLoading } = useQuery({
-    queryKey: ["in-season-played-tracks", userSlug],
-    queryFn: () => fetchPlayedTracks(userSlug),
-    staleTime: 10 * 60 * 1000,
-    enabled: Boolean(userSlug),
+  const upcomingFixtureSlug = myStreaksData?.fixtureSlug ?? null;
+
+  const { data: openLineupsData, isLoading: openLoading } = useQuery({
+    queryKey: ["in-season-competitions", userSlug, "OPEN", upcomingFixtureSlug],
+    queryFn: () => fetchOpenLineups(userSlug, upcomingFixtureSlug!),
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+    enabled: Boolean(userSlug) && Boolean(upcomingFixtureSlug),
   });
 
   const entries = useMemo<HotStreakEntry[]>(() => {
-    const inSeasonLive = (liveCompetitions ?? []).filter(
-      (c) => c.seasonality === "IN_SEASON",
-    );
-
-    // Authoritative set of in-season (leagueName, rarity) keys for the
-    // upcoming GW, filtered to leaderboard types that participate in the
-    // streak ladder (drops CHAMPIONS / ALL_STAR / GLOBAL — Sorare reports
-    // these as `seasonality: IN_SEASON` but the workspace's "real in-season"
-    // view excludes them, and the user wants the home page to match).
-    //
-    // Keyed by `leagueName` — NOT `leagueSlug` — because Sorare's league slug
-    // is fixture-scoped so slugs from UPCOMING and LIVE never match.
-    const upcomingInSeasonKeys = new Set<string>();
-    for (const meta of myStreaksData?.competitions ?? []) {
-      if (!isStreakLeaderboardType(meta.so5LeaderboardType)) continue;
-      upcomingInSeasonKeys.add(`${meta.leagueName}::${meta.mainRarityType}`);
-    }
-    // If my-streaks hasn't returned yet (or failed), don't fall through to
-    // "let everything through" — that's how arena comps like "European
-    // Leagues" leak in from the LIVE fixture. Show nothing until we know.
-    const haveAuthoritativeList = upcomingInSeasonKeys.size > 0;
-    const isInSeasonKey = (leagueName: string, rarity: string): boolean => {
-      if (!haveAuthoritativeList) return false;
-      return upcomingInSeasonKeys.has(`${leagueName}::${rarity}`);
-    };
-
     const out = new Map<string, HotStreakEntry>();
     const seedEntry = (
       leagueName: string,
       rarity: RarityType,
       iconUrl: string | null,
-      so5LeaderboardType: string | null = null,
+      so5LeaderboardType: string | null,
     ): HotStreakEntry => {
       const key = `${leagueName}::${rarity}`;
       let entry = out.get(key);
@@ -161,62 +172,51 @@ export function useHotStreakEntries({
       return entry;
     };
 
-    for (const live of inSeasonLive) {
-      if (!isInSeasonKey(live.leagueName, live.mainRarityType)) continue;
+    /** Fold a competition into the entries map, dedup'd by leaderboard slug
+     *  so we don't show the same lineup twice when LIVE and UPCOMING both
+     *  return the same closed-GW fixture. */
+    const seenLeaderboardSlugs = new Set<string>();
+    const ingest = (comp: InSeasonCompetition) => {
+      if (comp.seasonality !== "IN_SEASON") return;
+      if (!isStreakLeaderboardType(comp.so5LeaderboardType)) return;
+      if (seenLeaderboardSlugs.has(comp.slug)) return;
+      seenLeaderboardSlugs.add(comp.slug);
+
       const entry = seedEntry(
-        live.leagueName,
-        live.mainRarityType,
-        live.iconUrl ?? null,
-        live.so5LeaderboardType ?? null,
+        comp.leagueName,
+        comp.mainRarityType,
+        comp.iconUrl ?? null,
+        comp.so5LeaderboardType ?? null,
       );
-      if (!entry.streak && live.streak && live.streak.thresholds.length > 0) {
-        entry.streak = live.streak;
+      if (!entry.streak && comp.streak && comp.streak.thresholds.length > 0) {
+        entry.streak = comp.streak;
       }
-      const activeTeams = live.teams.filter((t) =>
+      const activeTeams = comp.teams.filter((t) =>
         t.slots.some((s) => s.cardSlug),
       );
       if (activeTeams.length > 0) {
         entry.liveDivisions.push({
-          division: live.division,
-          competition: live,
+          division: comp.division,
+          competition: comp,
           activeTeams,
         });
         entry.hasLiveLineup = true;
       }
-    }
+    };
 
-    for (const t of playedTracksData?.tracks ?? []) {
-      if (!isInSeasonKey(t.leagueName, t.mainRarityType)) continue;
-      seedEntry(t.leagueName, t.mainRarityType as RarityType, null);
-    }
-
-    // Always seed cross-league streak comps (Challenger / Contender) for
-    // every rarity in the upcoming fixture. They aggregate lower- and
-    // mid-tier leagues — any user with cards in those leagues can play
-    // them — so they shouldn't be gated on LIVE lineup or played-tracks
-    // history the way single-league comps are.
-    for (const meta of myStreaksData?.competitions ?? []) {
-      const type = meta.so5LeaderboardType ?? "";
-      const isCrossLeagueStreak =
-        type.includes("_CHALLENGERS_") || type.includes("_CONTENDERS_");
-      if (!isCrossLeagueStreak) continue;
-      seedEntry(
-        meta.leagueName,
-        meta.mainRarityType,
-        meta.iconUrl,
-        meta.so5LeaderboardType,
-      );
-    }
-
-    for (const meta of myStreaksData?.competitions ?? []) {
-      const key = `${meta.leagueName}::${meta.mainRarityType}`;
-      const entry = out.get(key);
-      if (!entry) continue;
-      if (!entry.iconUrl) entry.iconUrl = meta.iconUrl;
-      if (!entry.so5LeaderboardType && meta.so5LeaderboardType) {
-        entry.so5LeaderboardType = meta.so5LeaderboardType;
-      }
-    }
+    // LIVE first — when a GW is actually being played, its scoring data is
+    // what the user wants to see. UPCOMING then fills in any leaderboards
+    // that didn't appear in LIVE (e.g. between-GW state, or leagues whose
+    // schedule didn't overlap the live window).
+    //
+    // We deliberately do NOT seed from `played-tracks` here. That endpoint
+    // returns leaderboards the user touched in *recent* GWs, not the ones
+    // they're currently playing — so it surfaces stale rows like "MLS
+    // LIMITED" when the user's last MLS lineup was 6 GWs ago. Keeping the
+    // panel grounded in LIVE + OPEN contender data avoids those false
+    // positives.
+    for (const live of liveCompetitions ?? []) ingest(live);
+    for (const open of openLineupsData?.competitions ?? []) ingest(open);
 
     for (const entry of out.values()) {
       entry.liveDivisions.sort((a, b) => a.division - b.division);
@@ -236,11 +236,137 @@ export function useHotStreakEntries({
     });
 
     return result;
-  }, [myStreaksData, liveCompetitions, playedTracksData]);
+  }, [liveCompetitions, openLineupsData]);
+
+  // Prefer the gameweek of whichever source actually has the user's
+  // lineups: if openLineups has the fixture they just submitted to, surface
+  // that GW number; otherwise fall back to the LIVE GW Sorare reported.
+  const openHasLineups = (openLineupsData?.competitions ?? []).some((c) =>
+    c.teams.some((t) => t.slots.some((s) => s.cardSlug)),
+  );
+  const displayGameWeek = openHasLineups
+    ? (openLineupsData?.gameWeek ?? liveGameWeek)
+    : liveGameWeek;
 
   return {
     entries,
-    gameWeek: myStreaksData?.gameWeek ?? liveGameWeek,
-    loading: liveLoading || myStreaksLoading || playedLoading,
+    gameWeek: displayGameWeek,
+    loading: liveLoading || myStreaksLoading || openLoading,
+  };
+}
+
+// ─── UPCOMING mode — drives the "Next GW AI Suggestions" panel ───
+
+/**
+ * Build entries for the upcoming gameweek (the one the user is about to
+ * submit a lineup for). Source of truth is `my-streaks` (Sorare's UPCOMING
+ * fixture). We enrich each entry with the user's current streak progress
+ * from LIVE so AI suggestions aim at the right next-up level — without LIVE
+ * we have no signal that the user already cleared Lv.2 and should be
+ * targeting Lv.3.
+ */
+export function useUpcomingStreakEntries({
+  liveCompetitions,
+  userSlug,
+}: {
+  liveCompetitions: InSeasonCompetition[] | undefined;
+  userSlug: string;
+}): StreakEntriesResult {
+  const { data: myStreaksData, isLoading: myStreaksLoading } = useQuery({
+    queryKey: ["in-season-my-streaks"],
+    queryFn: fetchMyStreaks,
+    staleTime: 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+
+  const { data: playedTracksData, isLoading: playedLoading } = useQuery({
+    queryKey: ["in-season-played-tracks", userSlug],
+    queryFn: () => fetchPlayedTracks(userSlug),
+    staleTime: 10 * 60 * 1000,
+    enabled: Boolean(userSlug),
+  });
+
+  const entries = useMemo<HotStreakEntry[]>(() => {
+    // Build a (leagueName, rarity) → live streak lookup so we can stamp
+    // the user's progression onto upcoming entries. LIVE comps are the only
+    // source of `thresholds` data the my-streaks endpoint can't return.
+    const liveStreakByKey = new Map<string, InSeasonStreak>();
+    const liveIconByKey = new Map<string, string>();
+    for (const live of liveCompetitions ?? []) {
+      if (live.seasonality !== "IN_SEASON") continue;
+      const key = `${live.leagueName}::${live.mainRarityType}`;
+      if (live.streak && live.streak.thresholds.length > 0) {
+        const existing = liveStreakByKey.get(key);
+        if (!existing) liveStreakByKey.set(key, live.streak);
+      }
+      if (!liveIconByKey.has(key) && live.iconUrl) {
+        liveIconByKey.set(key, live.iconUrl);
+      }
+    }
+
+    const out = new Map<string, HotStreakEntry>();
+    const seedEntry = (
+      leagueName: string,
+      rarity: RarityType,
+      iconUrl: string | null,
+      so5LeaderboardType: string | null,
+    ): HotStreakEntry => {
+      const key = `${leagueName}::${rarity}`;
+      let entry = out.get(key);
+      if (!entry) {
+        entry = {
+          key,
+          leagueName,
+          mainRarityType: rarity,
+          so5LeaderboardType,
+          iconUrl: iconUrl ?? liveIconByKey.get(key) ?? null,
+          streak: liveStreakByKey.get(key) ?? null,
+          liveDivisions: [],
+          hasLiveLineup: false,
+        };
+        out.set(key, entry);
+      } else {
+        if (!entry.iconUrl && iconUrl) entry.iconUrl = iconUrl;
+        if (!entry.so5LeaderboardType && so5LeaderboardType) {
+          entry.so5LeaderboardType = so5LeaderboardType;
+        }
+      }
+      return entry;
+    };
+
+    // Authoritative upcoming list — these are the comps the user can submit
+    // a lineup for next GW.
+    for (const meta of myStreaksData?.competitions ?? []) {
+      if (!isStreakLeaderboardType(meta.so5LeaderboardType)) continue;
+      seedEntry(
+        meta.leagueName,
+        meta.mainRarityType,
+        meta.iconUrl,
+        meta.so5LeaderboardType,
+      );
+    }
+
+    // Played-tracks fills in icons / seeds entries that haven't loaded
+    // through my-streaks yet (e.g. cross-league comps the user's history
+    // proves they're playing).
+    for (const t of playedTracksData?.tracks ?? []) {
+      seedEntry(t.leagueName, t.mainRarityType as RarityType, null, null);
+    }
+
+    const result = Array.from(out.values());
+    result.sort((a, b) => {
+      const aLvl = a.streak?.currentLevel ?? 0;
+      const bLvl = b.streak?.currentLevel ?? 0;
+      if (aLvl !== bLvl) return bLvl - aLvl;
+      return a.leagueName.localeCompare(b.leagueName);
+    });
+
+    return result;
+  }, [myStreaksData, playedTracksData, liveCompetitions]);
+
+  return {
+    entries,
+    gameWeek: myStreaksData?.gameWeek,
+    loading: myStreaksLoading || playedLoading,
   };
 }

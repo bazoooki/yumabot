@@ -10,7 +10,7 @@ import {
 import { LineupCard } from "@/components/lineup-card/lineup-card";
 import { AIVerdict } from "@/components/ai/ai-verdict";
 import {
-  useHotStreakEntries,
+  useLiveStreakEntries,
   type HotStreakEntry,
 } from "./use-hot-streak-entries";
 import {
@@ -37,7 +37,7 @@ export function HotStreaksPanel({
   userSlug,
   onNavigate,
 }: HotStreaksPanelProps) {
-  const { entries, gameWeek, loading } = useHotStreakEntries({
+  const { entries, gameWeek, loading } = useLiveStreakEntries({
     liveCompetitions,
     liveLoading,
     liveGameWeek,
@@ -108,7 +108,7 @@ function CompetitionStreakRow({
 }: {
   entry: HotStreakEntry;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [aiOpen, setAiOpen] = useState(false);
   const streak = entry.streak;
   const currentThreshold =

@@ -209,8 +209,6 @@ export function HomeDashboard({ cards, onNavigate, userSlug }: HomeDashboardProp
           />
           <AISuggestionsPanel
             liveCompetitions={lineupsData?.competitions}
-            liveLoading={lineupsLoading}
-            liveGameWeek={lineupsData?.gameWeek}
             userSlug={userSlug}
             cards={cards}
             onNavigate={onNavigate}

@@ -5,18 +5,12 @@ import { Header } from "@/components/header";
 import { TabNav } from "@/components/tab-nav";
 import { UserPicker } from "@/components/user-picker";
 import { CardsProvider, useCards } from "@/providers/cards-provider";
-import { useMarketStream } from "@/lib/market/use-market-stream";
 import { CardsLoading } from "@/components/ui/cards-loading";
 import { QueryError } from "@/components/ui/query-error";
 import { OfflineBanner } from "@/components/ui/offline-banner";
 
-function MarketStreamKeepAlive() {
-  useMarketStream();
-  return null;
-}
-
 function MainLayoutInner({ children }: { children: React.ReactNode }) {
-  const { userSlug, cards, isLoading, error, handleUserSelect } = useCards();
+  const { userSlug, isLoading, error, handleUserSelect } = useCards();
 
   if (!userSlug) {
     return <UserPicker onSelect={handleUserSelect} />;
@@ -24,7 +18,6 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      <MarketStreamKeepAlive />
       <Header
         userSlug={userSlug}
         onUserChange={async (newSlug: string) => handleUserSelect(newSlug)}

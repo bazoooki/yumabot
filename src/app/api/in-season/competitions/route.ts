@@ -26,6 +26,51 @@ import type {
 
 // --- Shared helpers ---
 
+/**
+ * Sorare's `so5LeaderboardContenders` connection caps at 50 nodes per page
+ * regardless of `first`. Active managers can have 60+ contenders in a
+ * single GW (every (league × rarity × division × team) is its own
+ * contender), so we have to walk the cursor or we silently drop entire
+ * leaderboards from the panel.
+ *
+ * Loops until `hasNextPage` is false or we hit a safety cap, accumulating
+ * all `nodes` into the first page's response so the rest of the parser
+ * doesn't need to know about pagination.
+ */
+async function fetchAllContenders(
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<any> {
+  const MAX_PAGES = 10; // 500 contenders is far beyond any real account
+  let after: string | null = null;
+  let merged: any = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const result: any = await sorareClient.request(query, {
+      ...variables,
+      after,
+    });
+    const fixture = result?.so5?.so5Fixture;
+    const conn = fixture?.userFixtureResults?.so5LeaderboardContenders;
+    if (!fixture) return result;
+
+    if (!merged) {
+      merged = result;
+    } else {
+      const mergedConn =
+        merged.so5.so5Fixture.userFixtureResults.so5LeaderboardContenders;
+      mergedConn.nodes = mergedConn.nodes.concat(conn?.nodes ?? []);
+      mergedConn.pageInfo = conn?.pageInfo ?? mergedConn.pageInfo;
+    }
+
+    const pageInfo = conn?.pageInfo;
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) break;
+    after = pageInfo.endCursor;
+  }
+
+  return merged;
+}
+
 function parseSlot(appearance: any): InSeasonSlot {
   const pgs = appearance.playerGameScore;
   const game = pgs?.anyGame;
@@ -270,12 +315,12 @@ export async function GET(request: Request) {
   try {
     let result: any;
     if (isByFixture) {
-      result = await sorareClient.request(IN_SEASON_BY_FIXTURE_QUERY, {
+      result = await fetchAllContenders(IN_SEASON_BY_FIXTURE_QUERY, {
         userSlug,
         fixtureSlug,
       });
     } else if (fixtureType === "LIVE") {
-      result = await sorareClient.request(IN_SEASON_LIVE_QUERY, { userSlug });
+      result = await fetchAllContenders(IN_SEASON_LIVE_QUERY, { userSlug });
     } else {
       // Walk the next few upcoming fixtures and pick the first with at least
       // one IN_SEASON leaderboard. The list query returns metadata only

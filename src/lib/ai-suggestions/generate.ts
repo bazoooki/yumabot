@@ -45,9 +45,10 @@ function filterEligible(
   starterProbs: Record<string, number | null>,
 ): SorareCard[] {
   // HotStreakEntry is always sourced from an IN_SEASON competition (see
-  // useHotStreakEntries which filters live competitions on `seasonality ===
-  // "IN_SEASON"`), so we hardcode the seasonality to keep classic-edition
-  // cards of the same player out of the suggestion pool.
+  // useLiveStreakEntries / useUpcomingStreakEntries, both of which filter
+  // on `seasonality === "IN_SEASON"`), so we hardcode the seasonality to
+  // keep classic-edition cards of the same player out of the suggestion
+  // pool.
   return cards.filter((c) => {
     if (
       !isCardEligibleFor(c, {

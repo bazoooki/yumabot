@@ -72,18 +72,32 @@ export function LiveRoom({ cards, userSlug }: Props) {
     return slugs;
   }, [lineupsData]);
 
-  // ALL live + recently finished football games — connect to all of them
+  // Clubs the user holds cards for — used to pre-filter games before we
+  // pay for full roster fetches.
+  const ownedClubSlugs = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const c of cards) {
+      const slug = c.anyPlayer?.activeClub?.slug;
+      if (slug) slugs.add(slug);
+    }
+    return slugs;
+  }, [cards]);
+
+  // Live football games involving an owned club. Skipping every other live
+  // game keeps us off the global Sorare concurrency gate during busy slates.
   const allLiveGameIds = useMemo(() => {
     if (!fixture?.games) return [];
     return fixture.games
       .filter((g) => {
         if (g.sport !== "FOOTBALL") return false;
-        if (g.statusTyped === "playing") return true;
+        if (g.statusTyped === "playing") {
+          return ownedClubSlugs.has(g.homeTeam.slug) || ownedClubSlugs.has(g.awayTeam.slug);
+        }
         if (g.statusTyped === "played") return isRecentlyFinished(g);
         return false;
       })
       .map((g) => g.id);
-  }, [fixture]);
+  }, [fixture, ownedClubSlugs]);
 
   // Stream ALL live games — the hook filters events to owned players only
   const { games, events, isLoading, connectedCount } = useMultiGameStream({

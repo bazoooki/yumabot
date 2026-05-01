@@ -8,7 +8,7 @@ import type {
   SorareCard,
 } from "@/lib/types";
 import {
-  useHotStreakEntries,
+  useUpcomingStreakEntries,
   type HotStreakEntry,
 } from "./use-hot-streak-entries";
 import { AISuggestionRow } from "./ai-suggestion-row";
@@ -52,8 +52,6 @@ const MIN_ELIGIBLE_CARDS = 4;
 
 interface AISuggestionsPanelProps {
   liveCompetitions: InSeasonCompetition[] | undefined;
-  liveLoading: boolean;
-  liveGameWeek: number | undefined;
   userSlug: string;
   cards: SorareCard[];
   onNavigate: (tab: string) => void;
@@ -61,16 +59,12 @@ interface AISuggestionsPanelProps {
 
 export function AISuggestionsPanel({
   liveCompetitions,
-  liveLoading,
-  liveGameWeek,
   userSlug,
   cards,
   onNavigate,
 }: AISuggestionsPanelProps) {
-  const { entries, gameWeek, loading } = useHotStreakEntries({
+  const { entries, gameWeek, loading } = useUpcomingStreakEntries({
     liveCompetitions,
-    liveLoading,
-    liveGameWeek,
     userSlug,
   });
 

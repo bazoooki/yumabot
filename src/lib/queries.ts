@@ -266,7 +266,11 @@ const IN_SEASON_FIXTURE_BODY = `
     endDate
     userFixtureResults(userSlug: $userSlug) {
       completedThresholdsStreakTasksCount
-      so5LeaderboardContenders(first: 50) {
+      so5LeaderboardContenders(first: 50, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
           slug
           so5Leaderboard {
@@ -445,9 +449,10 @@ const IN_SEASON_FIXTURE_BODY = `
     }
 `;
 
-// Fetches existing lineups for LIVE fixture (user already has contenders)
+// Fetches existing lineups for LIVE fixture (user already has contenders).
+// $after paginates `so5LeaderboardContenders`; pass null for the first page.
 export const IN_SEASON_LIVE_QUERY = gql`
-  query InSeasonLive($userSlug: String!) {
+  query InSeasonLive($userSlug: String!, $after: String) {
     so5 {
       so5Fixture(type: LIVE) {
         ${IN_SEASON_FIXTURE_BODY}
@@ -456,9 +461,10 @@ export const IN_SEASON_LIVE_QUERY = gql`
   }
 `;
 
-// Fetches a user's lineups for a specific past fixture (closed GW)
+// Fetches a user's lineups for a specific past fixture (closed GW).
+// $after paginates `so5LeaderboardContenders`; pass null for the first page.
 export const IN_SEASON_BY_FIXTURE_QUERY = gql`
-  query InSeasonByFixture($userSlug: String!, $fixtureSlug: String!) {
+  query InSeasonByFixture($userSlug: String!, $fixtureSlug: String!, $after: String) {
     so5 {
       so5Fixture(slug: $fixtureSlug) {
         ${IN_SEASON_FIXTURE_BODY}
