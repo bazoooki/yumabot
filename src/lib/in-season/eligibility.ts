@@ -1,4 +1,8 @@
-import type { InSeasonCompetition, SorareCard } from "@/lib/types";
+import type {
+  InSeasonCompetition,
+  RarityType,
+  SorareCard,
+} from "@/lib/types";
 
 const CROSS_LEAGUE_KEYWORDS = ["challenger", "contender", "european", "global"];
 
@@ -21,8 +25,15 @@ export function isCrossLeagueCompetition(leagueName: string): boolean {
   return CROSS_LEAGUE_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
+export interface EligibilityCriteria {
+  mainRarityType: RarityType;
+  leagueName: string;
+  /** "IN_SEASON" or "CLASSIC". */
+  seasonality: string;
+}
+
 /**
- * Whether a card is eligible to enter the given in-season competition.
+ * Whether a card is eligible for a leaderboard matching the given criteria.
  *
  * Authoritative rule: walk `eligibleUpcomingLeagueTracks` and look for a
  * matching `(seasonality, mainRarityType, so5League.displayName)`. The
@@ -33,30 +44,44 @@ export function isCrossLeagueCompetition(leagueName: string): boolean {
  * Do NOT fall back to `inSeasonEligible` or `activeClub.domesticLeague`
  * for league matching — both miss loanees / dual-eligible cards.
  */
-export function isEligibleForCompetition(
+export function isCardEligibleFor(
   card: SorareCard,
-  comp: InSeasonCompetition,
+  { mainRarityType, leagueName, seasonality }: EligibilityCriteria,
 ): boolean {
-  if (card.rarityTyped !== comp.mainRarityType) return false;
+  if (card.rarityTyped !== mainRarityType) return false;
 
   const tracks = card.eligibleUpcomingLeagueTracks ?? [];
   if (tracks.length === 0) return false;
 
   const matchesSeasonality = (t: { entrySo5Leaderboard: { seasonality: string } }) =>
-    t.entrySo5Leaderboard.seasonality === comp.seasonality;
+    t.entrySo5Leaderboard.seasonality === seasonality;
 
-  if (isCrossLeagueCompetition(comp.leagueName)) {
+  if (isCrossLeagueCompetition(leagueName)) {
     return tracks.some(
       (t) =>
         matchesSeasonality(t) &&
-        t.entrySo5Leaderboard.mainRarityType === comp.mainRarityType,
+        t.entrySo5Leaderboard.mainRarityType === mainRarityType,
     );
   }
 
   return tracks.some(
     (t) =>
       matchesSeasonality(t) &&
-      t.entrySo5Leaderboard.mainRarityType === comp.mainRarityType &&
-      t.entrySo5Leaderboard.so5League.displayName === comp.leagueName,
+      t.entrySo5Leaderboard.mainRarityType === mainRarityType &&
+      t.entrySo5Leaderboard.so5League.displayName === leagueName,
   );
+}
+
+/**
+ * Convenience wrapper around `isCardEligibleFor` for an `InSeasonCompetition`.
+ */
+export function isEligibleForCompetition(
+  card: SorareCard,
+  comp: InSeasonCompetition,
+): boolean {
+  return isCardEligibleFor(card, {
+    mainRarityType: comp.mainRarityType,
+    leagueName: comp.leagueName,
+    seasonality: comp.seasonality,
+  });
 }

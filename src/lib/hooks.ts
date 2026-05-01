@@ -39,21 +39,27 @@ export function usePlayerIntel(
       seen.add(player.slug);
       slugs.push(player.slug);
     }
+    // Sort so the cache key is stable across re-renders that reorder cards.
+    slugs.sort();
     return slugs;
   }, [cards]);
 
   const { data } = useQuery({
-    queryKey: ["player-intel", allSlugs.length],
+    // Key by slug content (not just count) so distinct callers don't collide
+    // and identical callers reuse the cache across the app.
+    queryKey: ["player-intel", allSlugs.join(",")],
     queryFn: async () => {
-      const chunks: string[][] = [];
-      for (let i = 0; i < allSlugs.length; i += 20) {
-        chunks.push(allSlugs.slice(i, i + 20));
-      }
-      const results = await Promise.all(
-        chunks.map((chunk) => fetchPlayerIntelBatch(chunk))
-      );
       const merged: Record<string, PlayerIntel> = {};
-      for (const r of results) {
+      // Run chunks sequentially. The server fans out to one Sorare GraphQL
+      // call per slug (Sorare doesn't allow aliased duplicate root fields),
+      // throttled by a global concurrency gate in `sorareClient`. Sequential
+      // chunks here keep the gate's queue from ballooning when a large
+      // gallery primes intel — parallel chunks were the dominant cause of
+      // 429s on unrelated /api/in-season/competitions and /api/fixtures.
+      // 15-per-chunk matches knowledge/03-sorare-graphql.md.
+      for (let i = 0; i < allSlugs.length; i += 15) {
+        const chunk = allSlugs.slice(i, i + 15);
+        const r = await fetchPlayerIntelBatch(chunk);
         Object.assign(merged, r);
       }
       return merged;

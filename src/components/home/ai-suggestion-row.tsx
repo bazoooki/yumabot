@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { SorareCard } from "@/lib/types";
 import { usePlayerIntel } from "@/lib/hooks";
+import { isCardEligibleFor } from "@/lib/in-season/eligibility";
 import { useAiSuggestionsStore } from "@/lib/ai-suggestions-store";
 import { generateSuggestions } from "@/lib/ai-suggestions/generate";
 import { buildSuggestedCompetition } from "@/lib/in-season/build-suggested-competition";
@@ -24,9 +25,25 @@ export function AISuggestionRow({
   cards: SorareCard[];
   onNavigate: (tab: string) => void;
 }) {
+  // Pre-filter to cards eligible for THIS entry before asking for intel.
+  // Without this, every expanded row asks Sorare for starter odds on the
+  // user's entire gallery (often 700+ players) — which is what was bursting
+  // through the per-account rate limit and 429-ing unrelated requests.
+  const eligibleCards = useMemo(
+    () =>
+      cards.filter((c) =>
+        isCardEligibleFor(c, {
+          mainRarityType: entry.mainRarityType,
+          leagueName: entry.leagueName,
+          seasonality: "IN_SEASON",
+        }),
+      ),
+    [cards, entry.mainRarityType, entry.leagueName],
+  );
+
   // Source intel directly from the React Query-backed hook so we don't
   // depend on whether another tab happened to populate the in-season store.
-  const playerIntel = usePlayerIntel(cards) ?? null;
+  const playerIntel = usePlayerIntel(eligibleCards) ?? null;
   const settings = useAiSuggestionsStore();
 
   const result = useMemo(

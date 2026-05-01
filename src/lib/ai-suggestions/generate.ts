@@ -4,6 +4,7 @@ import {
   RISK_PROFILE_WEIGHTS,
   scoreCardsWithStrategy,
 } from "@/lib/ai-lineup";
+import { isCardEligibleFor } from "@/lib/in-season/eligibility";
 import type {
   PlayerIntel,
   RarityType,
@@ -45,19 +46,20 @@ function filterEligible(
   excludeDoubtful: boolean,
   starterProbs: Record<string, number | null>,
 ): SorareCard[] {
+  // HotStreakEntry is always sourced from an IN_SEASON competition (see
+  // useHotStreakEntries which filters live competitions on `seasonality ===
+  // "IN_SEASON"`), so we hardcode the seasonality to keep classic-edition
+  // cards of the same player out of the suggestion pool.
   return cards.filter((c) => {
-    if (c.rarityTyped !== rarity) return false;
-    // Authoritative eligibility: the card must have a track to an upcoming
-    // leaderboard matching this competition's rarity + league displayName.
-    // Do NOT fall back to activeClub.domesticLeague — loanees and dual-eligible
-    // players would be wrongly excluded.
-    const tracks = c.eligibleUpcomingLeagueTracks ?? [];
-    const matches = tracks.some(
-      (t) =>
-        t.entrySo5Leaderboard.mainRarityType === rarity &&
-        t.entrySo5Leaderboard.so5League.displayName === leagueName,
-    );
-    if (!matches) return false;
+    if (
+      !isCardEligibleFor(c, {
+        mainRarityType: rarity,
+        leagueName,
+        seasonality: "IN_SEASON",
+      })
+    ) {
+      return false;
+    }
     if (!c.anyPlayer?.activeClub?.upcomingGames?.length) return false;
     if (excludeDoubtful) {
       const slug = c.anyPlayer?.slug;
