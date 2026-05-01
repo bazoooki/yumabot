@@ -157,7 +157,14 @@ function parseLive(result: any, seasonalityFilter?: string): InSeasonCompetition
       };
     });
 
-    const streak = parseStreak(first.so5Lineup?.thresholdsStreakTask);
+    // `currentThreshold(forNextLineup: true).score` is the upcoming-GW
+    // target (one tier ahead when the in-flight lineup will clear its
+    // current tier). Pass it as `overrideCurrentScore` so the parsed
+    // `currentLevel` reflects what the manager is aiming at *next*, not
+    // the level they're already locked into.
+    const task = first.so5Lineup?.thresholdsStreakTask;
+    const overrideScore = task?.currentThreshold?.score ?? null;
+    const streak = parseStreak(task, overrideScore);
 
     const liveLeagueName = deriveLeagueName(lb);
     competitions.push({

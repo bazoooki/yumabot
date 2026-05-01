@@ -15,6 +15,11 @@ export interface MyStreakCompetition {
   mainRarityType: RarityType;
   division: number;
   seasonality: string;
+  /** Sorare's leaderboard-type enum (e.g. `IN_SEASON_ENGLAND_LIMITED`,
+   *  `IN_SEASON_CHALLENGERS_LIMITED`). Used by the home filter to drop
+   *  arena-style comps (CHAMPIONS / ALL_STAR / etc.) that Sorare tags as
+   *  IN_SEASON but aren't part of the streak ladder. */
+  so5LeaderboardType: string | null;
 }
 
 export interface MyStreaksResponse {
@@ -60,6 +65,7 @@ export async function GET() {
           mainRarityType: (lb.mainRarityType as RarityType) ?? "limited",
           division: lb.division ?? 1,
           seasonality: lb.seasonality,
+          so5LeaderboardType: lb.so5LeaderboardType ?? null,
         });
       }
     }
@@ -81,13 +87,15 @@ export async function GET() {
       );
     });
 
-    return NextResponse.json({
+    const payload: MyStreaksResponse = {
       fixtureSlug: fixture.slug,
       gameWeek: fixture.gameWeek,
       endDate: fixture.endDate,
       aasmState: fixture.aasmState,
       competitions,
-    });
+    };
+
+    return NextResponse.json(payload);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : String(error);

@@ -14,6 +14,7 @@ import {
   type StrategyMode,
 } from "@/components/ai/strategy-tab-strip";
 import type { HotStreakEntry } from "./use-hot-streak-entries";
+import { AISuggestionLoader } from "./ai-suggestion-loader";
 import { TrendingUp, AlertTriangle } from "lucide-react";
 
 export function AISuggestionRow({
@@ -43,7 +44,13 @@ export function AISuggestionRow({
 
   // Source intel directly from the React Query-backed hook so we don't
   // depend on whether another tab happened to populate the in-season store.
-  const playerIntel = usePlayerIntel(eligibleCards) ?? null;
+  const playerIntelData = usePlayerIntel(eligibleCards);
+  const playerIntel = playerIntelData ?? null;
+  // We're "waiting on intel" only when there are eligible cards to fetch
+  // intel for and the hook hasn't returned yet. Otherwise (no eligible
+  // cards, or intel loaded), the row should render its real result.
+  const isIntelLoading =
+    eligibleCards.length > 0 && playerIntelData === undefined;
   const settings = useAiSuggestionsStore();
 
   const result = useMemo(
@@ -108,6 +115,15 @@ export function AISuggestionRow({
     suggestionByStrategy[selectedStrategy]
       ? selectedStrategy
       : availableStrategies[0] ?? null;
+
+  // Intel still in flight — show the lively loader instead of a half-baked
+  // lineup. Without this guard, the row would render with null starter
+  // probabilities (so `excludeDoubtful` is a no-op and captain selection
+  // ignores reliability) and then snap to a different lineup once the
+  // requests come back, which felt broken.
+  if (isIntelLoading) {
+    return <AISuggestionLoader eligibleCards={eligibleCards} />;
+  }
 
   if (!result) {
     return (

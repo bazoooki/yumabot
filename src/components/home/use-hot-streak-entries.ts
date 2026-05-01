@@ -34,6 +34,25 @@ async function fetchMyStreaks(): Promise<MyStreaksResponse | null> {
   return (await res.json()) as MyStreaksResponse;
 }
 
+/**
+ * Sorare flags some arena/exhibition leaderboards (CHAMPIONS, GLOBAL_ALL_STAR,
+ * etc.) as `seasonality: IN_SEASON`, but they aren't part of the streak ladder
+ * the home page is meant to surface. The user's authoritative list is the
+ * country-specific streak comps plus the cross-league CHALLENGER and CONTENDER
+ * tiers — everything in `So5LeaderboardType` named like
+ * `IN_SEASON_<COUNTRY>_<RARITY>`, `IN_SEASON_CHALLENGERS_*`,
+ * `IN_SEASON_CONTENDERS_*`, plus the `IN_SEASON_*_THRESHOLDS_STREAK` US
+ * variants. Anything else (CHAMPIONS, ALL_STAR, etc.) is filtered out.
+ */
+function isStreakLeaderboardType(type: string | null | undefined): boolean {
+  if (!type) return false;
+  if (!type.startsWith("IN_SEASON_")) return false;
+  if (type.includes("_CHAMPIONS_")) return false;
+  if (type.includes("_ALL_STAR")) return false;
+  if (type.includes("_GLOBAL_")) return false;
+  return true;
+}
+
 async function fetchPlayedTracks(
   userSlug: string,
 ): Promise<PlayedTracksResponse | null> {
@@ -87,18 +106,24 @@ export function useHotStreakEntries({
     );
 
     // Authoritative set of in-season (leagueName, rarity) keys for the
-    // upcoming GW. Used to drop arena/leaderboard-only comps like "All Star",
-    // "Champion", "European Leagues" that can appear in LIVE or played-tracks
-    // but aren't real in-season tracks.
+    // upcoming GW, filtered to leaderboard types that participate in the
+    // streak ladder (drops CHAMPIONS / ALL_STAR / GLOBAL — Sorare reports
+    // these as `seasonality: IN_SEASON` but the workspace's "real in-season"
+    // view excludes them, and the user wants the home page to match).
     //
     // Keyed by `leagueName` — NOT `leagueSlug` — because Sorare's league slug
     // is fixture-scoped so slugs from UPCOMING and LIVE never match.
     const upcomingInSeasonKeys = new Set<string>();
     for (const meta of myStreaksData?.competitions ?? []) {
+      if (!isStreakLeaderboardType(meta.so5LeaderboardType)) continue;
       upcomingInSeasonKeys.add(`${meta.leagueName}::${meta.mainRarityType}`);
     }
+    // If my-streaks hasn't returned yet (or failed), don't fall through to
+    // "let everything through" — that's how arena comps like "European
+    // Leagues" leak in from the LIVE fixture. Show nothing until we know.
+    const haveAuthoritativeList = upcomingInSeasonKeys.size > 0;
     const isInSeasonKey = (leagueName: string, rarity: string): boolean => {
-      if (upcomingInSeasonKeys.size === 0) return true;
+      if (!haveAuthoritativeList) return false;
       return upcomingInSeasonKeys.has(`${leagueName}::${rarity}`);
     };
 
@@ -153,6 +178,19 @@ export function useHotStreakEntries({
     for (const t of playedTracksData?.tracks ?? []) {
       if (!isInSeasonKey(t.leagueName, t.mainRarityType)) continue;
       seedEntry(t.leagueName, t.mainRarityType as RarityType, null);
+    }
+
+    // Always seed cross-league streak comps (Challenger / Contender) for
+    // every rarity in the upcoming fixture. They aggregate lower- and
+    // mid-tier leagues — any user with cards in those leagues can play
+    // them — so they shouldn't be gated on LIVE lineup or played-tracks
+    // history the way single-league comps are.
+    for (const meta of myStreaksData?.competitions ?? []) {
+      const type = meta.so5LeaderboardType ?? "";
+      const isCrossLeagueStreak =
+        type.includes("_CHALLENGERS_") || type.includes("_CONTENDERS_");
+      if (!isCrossLeagueStreak) continue;
+      seedEntry(meta.leagueName, meta.mainRarityType, meta.iconUrl);
     }
 
     for (const meta of myStreaksData?.competitions ?? []) {

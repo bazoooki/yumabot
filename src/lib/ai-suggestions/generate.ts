@@ -5,6 +5,7 @@ import {
   scoreCardsWithStrategy,
 } from "@/lib/ai-lineup";
 import { isCardEligibleFor } from "@/lib/in-season/eligibility";
+import { nextTargetForEntry } from "@/lib/in-season/streak-target";
 import type {
   PlayerIntel,
   RarityType,
@@ -20,22 +21,14 @@ import type { SuggestedLineup } from "@/lib/in-season/build-suggested-competitio
 
 /**
  * Resolve the target threshold given the user's requested level offset.
- * Falls back gracefully if the streak data is missing or the offset pushes
- * past the last threshold.
+ * Delegates to the shared `nextTargetForEntry` helper which handles the
+ * heuristic fallback when streak data is missing.
  */
 function resolveTarget(
   entry: HotStreakEntry,
   offset: number,
-): { score: number; rewardLabel: string; level: number } | null {
-  const streak = entry.streak;
-  if (!streak || streak.thresholds.length === 0) return null;
-  const currentIdx =
-    streak.thresholds.findIndex((t) => t.isCurrent) >= 0
-      ? streak.thresholds.findIndex((t) => t.isCurrent)
-      : streak.thresholds.findIndex((t) => !t.isCleared);
-  const baseIdx = currentIdx >= 0 ? currentIdx : 0;
-  const idx = Math.min(streak.thresholds.length - 1, baseIdx + offset);
-  const t = streak.thresholds[idx];
+): { score: number; rewardLabel: string; level: number } {
+  const t = nextTargetForEntry(entry, offset);
   return { score: t.score, rewardLabel: t.reward, level: t.level };
 }
 
@@ -170,7 +163,6 @@ export function generateSuggestions({
   playerIntel,
 }: GenerateInput): GenerateOutput | null {
   const target = resolveTarget(entry, settings.targetLevelOffset);
-  if (!target) return null;
 
   // Build the starter-prob map from player intel (values are 0-100).
   const starterProbs: Record<string, number | null> = {};

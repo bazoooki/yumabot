@@ -344,7 +344,12 @@ const IN_SEASON_FIXTURE_BODY = `
                   }
                 }
               }
-              currentThreshold {
+              # forNextLineup: true returns the threshold the user should
+              # aim at for the upcoming GW — accounting for any cleared
+              # tier in the in-flight lineup. Without this we surface
+              # last GW's target (Lv.1) even though the user has already
+              # locked it in and will be aiming at Lv.2 next GW.
+              currentThreshold(forNextLineup: true) {
                 score
               }
             }
@@ -854,11 +859,17 @@ export const LEADERBOARD_STREAK_QUERY = gql`
 
 // Enumerates all in-season leaderboards for the UPCOMING GW. We fetch this
 // separately from IN_SEASON_LIVE_QUERY so the Hot Streaks panel can show
-// competitions the user hasn't entered yet — streak state comes from the live
-// fetch and is merged client-side.
+// competitions the user hasn't entered yet — streak state comes from the
+// live fetch and is merged client-side.
 //
-// Note: the `myThresholdsStreakTask` field on So5LeagueTrack requires session
-// auth (not APIKEY) and is therefore intentionally omitted here.
+// We also pull `so5LeaderboardType` so the client can drop arena-style
+// leaderboards (CHAMPIONS, ALL_STAR, etc.) that Sorare tags as IN_SEASON
+// but which the workspace's "real in-season" view excludes. Single-league
+// streaks all share an `IN_SEASON_<COUNTRY>_<RARITY>` shape; cross-league
+// streak comps share `IN_SEASON_CHALLENGERS_*` / `IN_SEASON_CONTENDERS_*`.
+//
+// Note: the `myThresholdsStreakTask` field on So5LeagueTrack requires
+// session auth (not APIKEY) and is therefore intentionally omitted here.
 export const MY_IN_SEASON_STREAKS_QUERY = gql`
   query MyInSeasonStreaks {
     so5 {
@@ -877,6 +888,7 @@ export const MY_IN_SEASON_STREAKS_QUERY = gql`
             division
             mainRarityType
             seasonality
+            so5LeaderboardType
             iconUrl
             so5LeaderboardGroup {
               displayName
