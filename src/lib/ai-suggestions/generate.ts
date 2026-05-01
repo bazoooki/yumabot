@@ -5,6 +5,7 @@ import {
   scoreCardsWithStrategy,
 } from "@/lib/ai-lineup";
 import { isCardEligibleFor } from "@/lib/in-season/eligibility";
+import { pickInSeasonLineup } from "@/lib/in-season/lineup-picker";
 import { nextTargetForEntry } from "@/lib/in-season/streak-target";
 import type {
   PlayerIntel,
@@ -36,6 +37,7 @@ function filterEligible(
   cards: SorareCard[],
   rarity: RarityType,
   leagueName: string,
+  so5LeaderboardType: string | null,
   excludeDoubtful: boolean,
   starterProbs: Record<string, number | null>,
 ): SorareCard[] {
@@ -49,6 +51,7 @@ function filterEligible(
         mainRarityType: rarity,
         leagueName,
         seasonality: "IN_SEASON",
+        so5LeaderboardType,
       })
     ) {
       return false;
@@ -61,56 +64,6 @@ function filterEligible(
     }
     return true;
   });
-}
-
-/**
- * Pick 5 cards from the sorted scored list enforcing positional diversity
- * (1 GK, 1 DEF, 1 MID, 1 FWD, then best remaining for the EX slot).
- * De-duplicates by player slug so the same player doesn't occupy two slots.
- */
-function pickFiveWithDiversity(
-  sorted: ScoredCardWithStrategy[],
-): ScoredCardWithStrategy[] {
-  const selected: ScoredCardWithStrategy[] = [];
-  const usedPlayers = new Set<string>();
-  const byPosition: Record<string, ScoredCardWithStrategy[]> = {
-    Goalkeeper: [],
-    Defender: [],
-    Midfielder: [],
-    Forward: [],
-  };
-  for (const sc of sorted) {
-    const pos = sc.card.anyPlayer?.cardPositions?.[0];
-    if (pos && byPosition[pos]) byPosition[pos].push(sc);
-  }
-
-  for (const pos of ["Goalkeeper", "Defender", "Midfielder", "Forward"]) {
-    const best = byPosition[pos].find((sc) => {
-      const slug = sc.card.anyPlayer?.slug ?? sc.card.slug;
-      return !usedPlayers.has(slug);
-    });
-    if (best && selected.length < 5) {
-      selected.push(best);
-      usedPlayers.add(best.card.anyPlayer?.slug ?? best.card.slug);
-    }
-  }
-
-  // EX slot fill — Sorare's EX slot accepts any position *except* Goalkeeper
-  // (see positionMatchesSlot in src/lib/normalization.ts). Without this guard
-  // the overflow would happily pick a second GK if it outranked other outfield
-  // candidates, producing an invalid lineup.
-  for (const sc of sorted) {
-    if (selected.length >= 5) break;
-    const pos = sc.card.anyPlayer?.cardPositions?.[0];
-    if (pos === "Goalkeeper") continue;
-    const slug = sc.card.anyPlayer?.slug ?? sc.card.slug;
-    if (!usedPlayers.has(slug)) {
-      selected.push(sc);
-      usedPlayers.add(slug);
-    }
-  }
-
-  return selected;
 }
 
 /**
@@ -176,6 +129,7 @@ export function generateSuggestions({
     cards,
     entry.mainRarityType,
     entry.leagueName,
+    entry.so5LeaderboardType,
     settings.excludeDoubtful,
     starterProbs,
   );
@@ -203,7 +157,7 @@ export function generateSuggestions({
       playerIntel,
       weightOverride,
     );
-    const selected = pickFiveWithDiversity(scored);
+    const selected = pickInSeasonLineup(scored);
     if (selected.length === 0) continue;
 
     const captainSlug = pickCaptain(selected);

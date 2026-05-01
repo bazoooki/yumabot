@@ -108,6 +108,7 @@ function parseUpcomingFixture(fixture: any): InSeasonCompetition[] {
         leagueName,
         leagueSlug: slugifyLeague(leagueName),
         seasonality: lb.seasonality,
+        so5LeaderboardType: lb.so5LeaderboardType ?? null,
         mainRarityType: (lb.mainRarityType as RarityType) ?? "limited",
         division: lb.division ?? 1,
         teamsCap: lb.teamsCap ?? 4,

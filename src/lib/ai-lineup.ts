@@ -9,6 +9,7 @@ import type {
   PlayerGameScore,
   PlayerIntel,
 } from "./types";
+import { pickInSeasonLineup } from "./in-season/lineup-picker";
 
 export interface ScoredCard {
   card: SorareCard;
@@ -730,47 +731,9 @@ export async function recommendInSeasonLineup(
 
   enrichedCards.sort((a, b) => b.strategyScore - a.strategyScore);
 
-  // Select with positional diversity
-  const selected: ScoredCardWithStrategy[] = [];
-  const usedPlayerSlugs = new Set<string>();
+  const selected = pickInSeasonLineup(enrichedCards);
   const warnings: string[] = [];
 
-  const positionMap: Record<string, ScoredCardWithStrategy[]> = {
-    Goalkeeper: [],
-    Defender: [],
-    Midfielder: [],
-    Forward: [],
-  };
-
-  for (const sc of enrichedCards) {
-    const pos = sc.card.anyPlayer?.cardPositions?.[0];
-    if (pos && positionMap[pos]) {
-      positionMap[pos].push(sc);
-    }
-  }
-
-  for (const pos of ["Goalkeeper", "Defender", "Midfielder", "Forward"]) {
-    const playerSlug = (sc: ScoredCardWithStrategy) =>
-      sc.card.anyPlayer?.slug ?? sc.card.slug;
-    const best = positionMap[pos].find(
-      (sc) => !usedPlayerSlugs.has(playerSlug(sc)),
-    );
-    if (best && selected.length < 5) {
-      selected.push(best);
-      usedPlayerSlugs.add(playerSlug(best));
-    }
-  }
-
-  for (const sc of enrichedCards) {
-    if (selected.length >= 5) break;
-    const playerSlug = sc.card.anyPlayer?.slug ?? sc.card.slug;
-    if (!usedPlayerSlugs.has(playerSlug)) {
-      selected.push(sc);
-      usedPlayerSlugs.add(playerSlug);
-    }
-  }
-
-  // Validate min in-season cards
   const inSeasonCount = selected.filter(
     (sc) => sc.card.inSeasonEligible,
   ).length;

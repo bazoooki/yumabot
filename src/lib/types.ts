@@ -305,6 +305,10 @@ export interface InSeasonCompetition {
   leagueName: string;
   leagueSlug: string;
   seasonality: string;
+  /** Sorare's leaderboard-type enum (e.g. `IN_SEASON_ENGLAND_LIMITED`,
+   *  `IN_SEASON_CHALLENGERS_LIMITED`). Authoritative for cross-league
+   *  eligibility — see `isCardEligibleFor`. */
+  so5LeaderboardType: string | null;
   mainRarityType: RarityType;
   division: number;
   teamsCap: number;

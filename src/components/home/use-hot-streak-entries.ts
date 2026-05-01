@@ -18,6 +18,10 @@ export interface HotStreakEntry {
   key: string; // `${leagueName}::${mainRarityType}` — stable across fixtures
   leagueName: string;
   mainRarityType: RarityType;
+  /** Sorare's leaderboard-type enum (e.g. `IN_SEASON_CHALLENGERS_LIMITED`).
+   *  Used by the eligibility check to match cards by track-type for
+   *  cross-league competitions where displayName matching doesn't work. */
+  so5LeaderboardType: string | null;
   iconUrl: string | null;
   streak: InSeasonStreak | null;
   liveDivisions: Array<{
@@ -132,6 +136,7 @@ export function useHotStreakEntries({
       leagueName: string,
       rarity: RarityType,
       iconUrl: string | null,
+      so5LeaderboardType: string | null = null,
     ): HotStreakEntry => {
       const key = `${leagueName}::${rarity}`;
       let entry = out.get(key);
@@ -140,14 +145,18 @@ export function useHotStreakEntries({
           key,
           leagueName,
           mainRarityType: rarity,
+          so5LeaderboardType,
           iconUrl,
           streak: null,
           liveDivisions: [],
           hasLiveLineup: false,
         };
         out.set(key, entry);
-      } else if (!entry.iconUrl && iconUrl) {
-        entry.iconUrl = iconUrl;
+      } else {
+        if (!entry.iconUrl && iconUrl) entry.iconUrl = iconUrl;
+        if (!entry.so5LeaderboardType && so5LeaderboardType) {
+          entry.so5LeaderboardType = so5LeaderboardType;
+        }
       }
       return entry;
     };
@@ -158,6 +167,7 @@ export function useHotStreakEntries({
         live.leagueName,
         live.mainRarityType,
         live.iconUrl ?? null,
+        live.so5LeaderboardType ?? null,
       );
       if (!entry.streak && live.streak && live.streak.thresholds.length > 0) {
         entry.streak = live.streak;
@@ -190,7 +200,12 @@ export function useHotStreakEntries({
       const isCrossLeagueStreak =
         type.includes("_CHALLENGERS_") || type.includes("_CONTENDERS_");
       if (!isCrossLeagueStreak) continue;
-      seedEntry(meta.leagueName, meta.mainRarityType, meta.iconUrl);
+      seedEntry(
+        meta.leagueName,
+        meta.mainRarityType,
+        meta.iconUrl,
+        meta.so5LeaderboardType,
+      );
     }
 
     for (const meta of myStreaksData?.competitions ?? []) {
@@ -198,6 +213,9 @@ export function useHotStreakEntries({
       const entry = out.get(key);
       if (!entry) continue;
       if (!entry.iconUrl) entry.iconUrl = meta.iconUrl;
+      if (!entry.so5LeaderboardType && meta.so5LeaderboardType) {
+        entry.so5LeaderboardType = meta.so5LeaderboardType;
+      }
     }
 
     for (const entry of out.values()) {

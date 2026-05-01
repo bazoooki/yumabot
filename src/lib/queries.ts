@@ -274,6 +274,7 @@ const IN_SEASON_FIXTURE_BODY = `
             mainRarityType
             seasonality
             seasonalityName
+            so5LeaderboardType
             teamsCap
             cutOffDate
             iconUrl
@@ -484,6 +485,7 @@ export const IN_SEASON_UPCOMING_QUERY = gql`
             mainRarityType
             seasonality
             seasonalityName
+            so5LeaderboardType
             teamsCap
             cutOffDate
             iconUrl
@@ -548,6 +550,7 @@ export const IN_SEASON_FIXTURE_LEAGUES_QUERY = gql`
             mainRarityType
             seasonality
             seasonalityName
+            so5LeaderboardType
             teamsCap
             cutOffDate
             iconUrl

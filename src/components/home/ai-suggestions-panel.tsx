@@ -224,10 +224,11 @@ function SuggestionRowShell({
           mainRarityType: entry.mainRarityType,
           leagueName: entry.leagueName,
           seasonality: "IN_SEASON",
+          so5LeaderboardType: entry.so5LeaderboardType,
         });
         return ok ? n + 1 : n;
       }, 0),
-    [cards, entry.mainRarityType, entry.leagueName],
+    [cards, entry.mainRarityType, entry.leagueName, entry.so5LeaderboardType],
   );
 
   const target = nextTargetForEntry(entry);

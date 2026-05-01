@@ -37,9 +37,10 @@ export function AISuggestionRow({
           mainRarityType: entry.mainRarityType,
           leagueName: entry.leagueName,
           seasonality: "IN_SEASON",
+          so5LeaderboardType: entry.so5LeaderboardType,
         }),
       ),
-    [cards, entry.mainRarityType, entry.leagueName],
+    [cards, entry.mainRarityType, entry.leagueName, entry.so5LeaderboardType],
   );
 
   // Source intel directly from the React Query-backed hook so we don't
